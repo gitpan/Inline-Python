@@ -9,9 +9,8 @@ char *_python_argv[] = {
   "python",
 };
 
-#define DECREF(x) { Py_DECREF(x); }
-#define Printf(format,args...) {  }
-//#define Printf printf
+#define Printf(x) 
+//#define Printf(x) printf x
 
 #ifndef SvPV_nolen
 static STRLEN n_a;
@@ -43,13 +42,13 @@ SV* Py2Pl (PyObject *obj, char *perl_class) {
        int i;
        int sz = PySequence_Length(obj);
 
-       Printf("sequence (%i)\n",sz);
+       Printf(("sequence (%i)\n",sz));
 
        for (i=0; i<sz; i++) {
          PyObject *tmp = PySequence_GetItem(obj,i); /* new reference */
          SV* next = Py2Pl(tmp,perl_class);
          av_push(retval, next);
-         DECREF(tmp);
+         Py_DECREF(tmp);
        }
        return newRV_noinc((SV*) retval);
     }
@@ -60,7 +59,7 @@ SV* Py2Pl (PyObject *obj, char *perl_class) {
        PyObject *keys = PyMapping_Keys(obj);              /* new reference */
        PyObject *vals = PyMapping_Values(obj);            /* new reference */
 
-       Printf("mapping (%i)\n",sz);
+       Printf(("mapping (%i)\n",sz));
 
        for (i=0; i<sz; i++) {
            PyObject *key = PySequence_GetItem(keys,i);    /* new reference */
@@ -78,7 +77,7 @@ SV* Py2Pl (PyObject *obj, char *perl_class) {
               */
              PyObject *s = PyObject_Str(key);
 	     key_val = PyString_AsString(s);
-             DECREF(s);
+             Py_DECREF(s);
            }
              else {
              key_val = PyString_AsString(key);
@@ -90,18 +89,18 @@ SV* Py2Pl (PyObject *obj, char *perl_class) {
 
            PERL_HASH(hash,key_val,strlen(key_val));
            hv_store(retval,key_val,strlen(key_val),sv_val,hash);
-           DECREF(key);
-           DECREF(val);
+           Py_DECREF(key);
+           Py_DECREF(val);
        }
-       DECREF(keys);
-       DECREF(vals);
+       Py_DECREF(keys);
+       Py_DECREF(vals);
        return newRV_noinc((SV*)retval);
     }
     else {
        PyObject *string = PyObject_Str(obj);  /* new reference */
        char *str = PyString_AsString(string);
        SV* s2 = newSVpv(str,0);
-       DECREF(string);
+       Py_DECREF(string);
        return s2;
     }
 }
@@ -115,27 +114,25 @@ PyObject *Pl2Py (SV *obj) {
    PyObject *o;
 
    if (SvIOKp(obj)) {
-      Printf("integer\n");
+      Printf(("integer\n"));
       o = PyInt_FromLong((long)SvIV(obj)); 
    }
    else if (SvNOKp(obj)) { 
       PyObject *tmp = PyString_FromString(SvPV_nolen(obj));
-      Printf("float\n");
+      Printf(("float\n"));
       if (tmp)
 	o = PyNumber_Float(tmp);
       else {
-	 fprintf(stderr, "Internal Error --");
-	 fprintf(stderr, "your Perl string \"%s\" could not \n", SvPV_nolen(obj));
-         fprintf(stderr, "be converted to a Python string\n");
+	 croak("Internal Error -- your Perl string \"%s\" could not be converted to a Python string", SvPV_nolen(obj));
       }
-      DECREF(tmp);
+      Py_DECREF(tmp);
    }
    else if (SvPOKp(obj)) {
       char *str = SvPV_nolen(obj);
-      Printf("string = ");
-      Printf("%s\n", str);
+      Printf(("string = "));
+      Printf(("%s\n", str));
       o = PyString_FromString(str);
-      Printf("string ok\n");
+      Printf(("string ok\n"));
    }
    else if (SvROK(obj) && SvTYPE(SvRV(obj))==SVt_PVAV) {
       AV* av = (AV*) SvRV(obj);
@@ -143,7 +140,7 @@ PyObject *Pl2Py (SV *obj) {
       int len = av_len(av) + 1;
       o = PyTuple_New(len);
 
-      Printf("array (%i)\n", len);
+      Printf(("array (%i)\n", len));
 
       for (i=0; i<len; i++) {
           SV *tmp = av_shift(av);
@@ -156,7 +153,7 @@ PyObject *Pl2Py (SV *obj) {
       int len = hv_iterinit(hv);
       int i;
 
-      Printf("hash (%i)\n", len);
+      Printf(("hash (%i)\n", len));
 
       for (i=0; i<len; i++) {
           HE *next = hv_iternext(hv);
@@ -164,10 +161,10 @@ PyObject *Pl2Py (SV *obj) {
           char *key = hv_iterkey(next,&n_a);
           PyObject *val = Pl2Py ( hv_iterval(hv, next) );
 	  PyDict_SetItemString(dict,key,val); 
-          DECREF(val);                              
+          Py_DECREF(val);                              
       }
 
-      Printf("returning from hash conversion.\n");
+      Printf(("returning from hash conversion.\n"));
 
       return dict;
    }
@@ -184,59 +181,11 @@ PyObject *Pl2Py (SV *obj) {
       return (PyObject*)ptr;
    }
    else {
-      fprintf(stderr, "Internal error -- unsupported Perl datatype.\n");
+      croak("Internal error -- unsupported Perl datatype.\n");
       return PyString_FromString("Error converting perl structure.");
    }
-   Printf("returning from Pl2Py\n");
+   Printf(("returning from Pl2Py\n"))
    return o;
-}
-
-/* The following two functions are probably not needed, but they're
- * still here, for old time's sake :)
- */
-
-/* returns PyObject * on success, else NULL */
-PyObject *find_method(PyObject *klass, char *method) {
-  PyObject *dict = PyObject_GetAttrString(klass, "__dict__");
-  int dict_len = PyObject_Length(dict);
-  PyObject *bases;
-  int bases_len;
-  int i;
-
-  printf("scanning class: ");
-  PyObject_Print(klass,stdout,0); printf("\n");
-
-  /* first check this class */
-  if (PyMapping_HasKeyString(dict,method))
-    return PyMapping_GetItemString(dict,method);
-
-  bases = PyObject_GetAttrString(klass, "__bases__");
-  bases_len = PyObject_Length(bases);
-  for (i=0; i<bases_len; i++) {
-    PyObject *methobj = find_method(PySequence_GetItem(bases, i), method);
-    if (methobj)
-      return methobj;
-  }
-  return NULL;
-}
-
-PyObject *find_inherited_method(PyObject *instance, char *method) {
-  PyObject *klass = PyObject_GetAttrString(instance, "__class__");
-  PyObject *bases = PyObject_GetAttrString(klass, "__bases__");
-
-  int num_bases = PyObject_Length(bases);
-  int i;
-
-  printf("find_inherited_method(");
-  PyObject_Print(instance,stdout,0);
-  printf("%s)\n",method);
-
-  for (i=0; i<num_bases; i++) {
-    PyObject *methobj = find_method(PySequence_GetItem(bases, i), method);
-    if (methobj)
-      return methobj;
-  }
-  return NULL;
 }
 
 MODULE = Inline::Python   PACKAGE = Inline::Python
@@ -264,7 +213,7 @@ _Inline_parse_python_namespace()
     if (PyCallable_Check(val)) {
       if (PyFunction_Check(val)) {
         char *name = PyString_AsString(key);
-        Printf("Found a function: %s\n", name);
+        Printf(("Found a function: %s\n", name));
 	av_push(functions, newSVpv(name,0));
       }
       else if (PyClass_Check(val)) {
@@ -279,7 +228,7 @@ _Inline_parse_python_namespace()
 	AV* bases = newAV();
 	U32 hash;
 
-	Printf("Found a class: %s\n", name);
+	Printf(("Found a class: %s\n", name));
 
 	/* populate the array */
 	for (j=0; j<dict_len; j++) {
@@ -287,7 +236,7 @@ _Inline_parse_python_namespace()
 	  PyObject *cls_val = PyObject_GetItem(cls_dict,cls_key);
 	  char *fname = PyString_AsString(cls_key);
 	  if (PyFunction_Check(cls_val)) {
-	    Printf("Found a method of %s: %s\n", name, fname);
+	    Printf(("Found a method of %s: %s\n", name, fname));
 	    av_push(methods,newSVpv(fname,0));
 	  }
 	}
@@ -323,7 +272,7 @@ _destroy_python_object(obj)
           croak("destroy_python_object caught NULL PyObject pointer. Are you using a Python object?\n");
         }
         py_object = (PyObject*)ptr;
-        DECREF(py_object);
+        Py_DECREF(py_object);
       }
 
 void
@@ -344,7 +293,7 @@ _eval_python_function(PKG, FNAME...)
 
   PPCODE:
 
-  Printf("function: %s\n", FNAME);
+  Printf(("function: %s\n", FNAME));
 
   if (!PyCallable_Check(func)) {
     warn("Error -- Python function %s is not a callable object\n",
@@ -352,7 +301,7 @@ _eval_python_function(PKG, FNAME...)
     XSRETURN_EMPTY;
   }
 
-  Printf("function is callable!\n");
+  Printf(("function is callable!\n"));
   
   tuple = PyTuple_New(items-2);
   
@@ -362,20 +311,20 @@ _eval_python_function(PKG, FNAME...)
       PyTuple_SetItem(tuple, i-2, o);
     }
   }
-  Printf("calling func\n");
+  Printf(("calling func\n"));
   py_retval = PyObject_CallObject(func, tuple);
-  Printf("received a response\n");
+  Printf(("received a response\n"));
   if (!py_retval || (PyErr_Occurred() != NULL)) {
     PyErr_Print();
-    DECREF(tuple);
-    DECREF(func);
+    Py_DECREF(tuple);
+    Py_DECREF(func);
     croak("Error -- PyObject_CallObject(...) failed.\n");
     XSRETURN_EMPTY;
   }
-  Printf("no error -- calling Py2Pl()\n");
+  Printf(("no error -- calling Py2Pl()\n"));
   ret = Py2Pl(py_retval, PKG);
   if (!PyClass_Check(func))
-    DECREF(py_retval); /* don't decrement it if we're saving it for later */
+    Py_DECREF(py_retval); /* don't decrement it if we're saving it for later */
   
   if (SvROK(ret) && (SvTYPE(SvRV(ret)) == SVt_PVAV)) {
     /* if it is an array, return the array elements ourselves. */
@@ -408,7 +357,7 @@ _eval_python_method(pkg, mname, _inst, ...)
 
   PPCODE:
 
-  Printf("eval_python_method\n");
+  Printf(("eval_python_method\n"));
 
   if (SvROK(_inst) && SvTYPE(SvRV(_inst))==SVt_PVMG) {
     inst = (PyObject*)SvIV(SvRV(_inst));
@@ -433,19 +382,19 @@ _eval_python_method(pkg, mname, _inst, ...)
     }
   }
 
-  Printf("calling func\n");
+  Printf(("calling func\n"));
   py_retval = PyObject_CallObject(method, tuple);
-  Printf("received a response\n");
+  Printf(("received a response\n"));
   if (!py_retval && (PyErr_Occurred() != NULL)) {
     PyErr_Print();
-    DECREF(tuple);
-    DECREF(method);
+    Py_DECREF(tuple);
+    Py_DECREF(method);
     croak("Error -- PyObject_CallObject(...) failed.\n");
     XSRETURN_EMPTY;
   }
-  Printf("no error -- calling Py2Pl()\n");
+  Printf(("no error -- calling Py2Pl()\n"));
   ret = Py2Pl(py_retval, pkg);
-  DECREF(py_retval);
+  Py_DECREF(py_retval);
   
   if (SvROK(ret) && (SvTYPE(SvRV(ret)) == SVt_PVAV)) {
     /* if it is an array, return the array elements ourselves. */

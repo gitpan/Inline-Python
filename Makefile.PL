@@ -5,8 +5,6 @@ use ExtUtils::MakeMaker;
 #============================================================================
 use Config;
 $version = $Config{version};
-#my $version = $];
-#print $version,"\n";
 
 #============================================================================
 # Python libraries to look for
@@ -31,6 +29,14 @@ my @py_libs =
    '/usr/local/ActivePython-2.0/lib/python2.0/config/libpython2.0.so',
    '/usr/local/ActivePython-1.6/lib/python1.6/config/libpython1.6.so',
    '/usr/local/ActivePython-1.5/lib/python1.5/config/libpython1.5.so',
+
+   # Win32 support
+   'C:/Python20/libs/python20.lib',
+   'C:/Python16/libs/python16.lib',
+   'C:/Python15/libs/python15.lib',
+   'C:/Program Files/Python20/libs/python20.lib',
+   'C:/Program Files/Python16/libs/python16.lib',
+   'C:/Program Files/Python15/libs/python15.lib',
   );
 
 #============================================================================
@@ -47,6 +53,14 @@ my @py_incs =
    '/usr/local/include/python2.0',
    '/usr/local/include/python1.6',
    '/usr/local/include/python1.5',
+
+   # Win32 support
+   'C:/Python20/include',
+   'C:/Python16/include',
+   'C:/Python15/include',
+   'C:/Program Files/Python20/include',
+   'C:/Program Files/Python16/include',
+   'C:/Program Files/Python15/include',
   );
 
 #============================================================================
@@ -72,7 +86,7 @@ my $num = 1;
 my $lib = prompt(join("\n",("Found these Python libraries: ",
 			    map {$num++ . ". $_"} @py_libs_found))."\nUse? (or enter alternative)",
 		 "1") if @py_libs_found;
-$lib = prompt ("Please enter the Python library.", "")
+$lib = prompt ("Couldn't find your Python library. Please enter the path to one:", "")
   unless @py_libs_found;
 
 $lib = $py_libs_found[$lib-1] if $lib =~ /^\d+$/;
@@ -101,15 +115,21 @@ my %hints =
   (
    'python2.0' => ['-lpython2.0',
 		   '-ldb -lutil', # seems to always be required for 2.0
-		   $version < 5.6 ? "-lpthread":"",
-		   $tkinter ? "-ltcl -ltk -ltix":"",
+		   ($Config{usethreads} && $Config{osname} ne 'MSWin32') ? "" : "-lpthread",
+		   $tkinter ? "-ltcl -ltk -ltix" : "",
 		  ],
    'python1.6' => ['-lpython1.6',
-		   $tkinter ? "-ltcl -ltk -ltix":"",
+		   $tkinter ? "-ltcl -ltk -ltix" : "",
+		   ($Config{usethreads} && $Config{osname} ne 'MSWin32') ? "" : "-lpthread",
 		  ],
    'python1.5' => ['-lpython1.5',
-		   $tkinter ? "-ltcl -ltk -ltix":"",
+		   $tkinter ? "-ltcl -ltk -ltix" : "",
+		   ($Config{usethreads} && $Config{osname} ne 'MSWin32') ? "" : "-lpthread",
 		  ],
+   # Win32 support:
+   'python20' => ['-lpython20'],
+   'python16' => ['-lpython16'],
+   'python15' => ['-lpython15'],
   );
 
 my $pyver;
