@@ -128,24 +128,27 @@ SV *Py2Pl(PyObject * obj) {
 		HV *retval = newHV();
 		int i;
 		int sz = PyMapping_Length(obj);
-		PyObject *keys = PyMapping_Keys(obj);	/* new reference */
-		PyObject *vals = PyMapping_Values(obj);	/* new reference */
+		PyObject *keys = PyMapping_Keys(obj);   /* new reference */
+		PyObject *vals = PyMapping_Values(obj); /* new reference */
 
 		Printf(("Py2Pl: dict/map\n"));
 		Printf(("mapping (%i)\n", sz));
 
 		for (i = 0; i < sz; i++) {
+			PyObject *key, *val;
+			SV *sv_val;
+			char *key_val;
+
 			Printf(("working on map item  %i\n", i));
-			PyObject *key = PySequence_GetItem(keys, i);	/* new reference */
-			PyObject *val = PySequence_GetItem(vals, i);	/* new reference */
+			key = PySequence_GetItem(keys, i); /* new reference */
+			val = PySequence_GetItem(vals, i); /* new reference */
 #ifdef I_PY_DEBUG
 			printf("recursive call to get value for key:");
 			PyObject_Print(key, stdout, Py_PRINT_RAW);
 			printf("\n");
 #endif
 
-			SV *sv_val = Py2Pl(val);
-			char *key_val;
+			sv_val = Py2Pl(val);
 
 			if (!PyString_Check(key)) {
 				/* Warning -- encountered a non-string key value while converting a 

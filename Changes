@@ -1,5 +1,12 @@
 Revision history for Perl extension Inline::Python.
 
+0.22  Sun Jan  9 22:29:54 PST 2005
+	[Bug reported by David Dyck]
+	- removed some declarations after statements
+	- newer versions of gcc seem to accept this by default, while older
+	  versions just croak. Of course, the older versions also don't
+	  support -Wdeclaration-after-statement.
+
 0.21  Mon Jul 26 13:40:57 CDT 2004
 	[Patch from Eric Wilhelm]
 	- Added support for 'new-style' python classes which subtype builtin
