@@ -1,164 +1,285 @@
-use ExtUtils::MakeMaker;
-
-#============================================================================
-# What perl are we running?
-#============================================================================
+use Data::Dumper;
 use Config;
-$version = $Config{version};
+use ExtUtils::MakeMaker;
+use Getopt::Long;
+
+GetOptions(
+	   'gdb:s' => \$gdb,
+	   debug => \$debug,
+	   help => \$help,
+	  );
+
+usage() if $help;
 
 #============================================================================
-# Python libraries to look for
+# What python are we going to try?
 #============================================================================
-my @py_libs = 
-  (
-   '/usr/lib/libpython2.0.a',
-   '/usr/lib/libpython1.6.a',
-   '/usr/lib/libpython1.5.a',
-   '/usr/lib/libpython2.0.so',
-   '/usr/lib/libpython1.6.so',
-   '/usr/lib/libpython1.5.so',
-   '/usr/lib/python1.5/config/libpython1.5.a',
-   '/usr/lib/python1.6/config/libpython1.6.a',
-   '/usr/lib/python2.0/config/libpython2.0.a',
-   '/usr/lib/python1.5/config/libpython1.5.so',
-   '/usr/lib/python1.6/config/libpython1.6.so',
-   '/usr/lib/python2.0/config/libpython2.0.so',
-   '/usr/local/lib/libpython2.0.a',
-   '/usr/local/lib/libpython1.6.a',
-   '/usr/local/lib/libpython1.5.a',
-   '/usr/local/lib/libpython2.0.so',
-   '/usr/local/lib/libpython1.6.so',
-   '/usr/local/lib/libpython1.5.so',
-   '/usr/local/ActivePython-2.0/lib/python2.0/config/libpython2.0.a',
-   '/usr/local/ActivePython-1.6/lib/python1.6/config/libpython1.6.a',
-   '/usr/local/ActivePython-1.5/lib/python1.5/config/libpython1.5.a',
-   '/usr/local/ActivePython-2.0/lib/python2.0/config/libpython2.0.so',
-   '/usr/local/ActivePython-1.6/lib/python1.6/config/libpython1.6.so',
-   '/usr/local/ActivePython-1.5/lib/python1.5/config/libpython1.5.so',
-
-   # Win32 support
-   'C:/Python20/libs/python20.lib',
-   'C:/Python16/libs/python16.lib',
-   'C:/Python15/libs/python15.lib',
-   'C:/Program Files/Python20/libs/python20.lib',
-   'C:/Program Files/Python16/libs/python16.lib',
-   'C:/Program Files/Python15/libs/python15.lib',
-  );
-
-#============================================================================
-# Python include files to look for
-#============================================================================
-my @py_incs = 
-  (
-   '/usr/local/ActivePython-2.0/include/python2.0',
-   '/usr/local/ActivePython-1.6/include/python1.6',
-   '/usr/local/ActivePython-1.5/include/python1.5',
-   '/usr/include/python2.0',
-   '/usr/include/python1.6',
-   '/usr/include/python1.5',
-   '/usr/local/include/python2.0',
-   '/usr/local/include/python1.6',
-   '/usr/local/include/python1.5',
-
-   # Win32 support
-   'C:/Python20/include',
-   'C:/Python16/include',
-   'C:/Python15/include',
-   'C:/Program Files/Python20/include',
-   'C:/Program Files/Python16/include',
-   'C:/Program Files/Python15/include',
-  );
-
-#============================================================================
-# Search for libraries
-#============================================================================
-my @py_libs_found;
-for my $loc (@py_libs) {
-    push(@py_libs_found, $loc) if -f $loc;
+my @pythons;
+my $sep = $^O eq 'MSWin32' ? ";" : ":";
+for $p (split /$sep/, $ENV{PATH}) {
+    $p =~ s/^~/$ENV{HOME}/;
+    $p .= "/python";
+    push @pythons, { path => $p } if -f $p && -x $p;
 }
 
-#============================================================================
-# Search for include directories
-#============================================================================
-my @py_incs_found;
-for my $loc (@py_incs) {
-    push(@py_incs_found, $loc) if -d $loc;
-}
+# Keep them in PATH order.
+#@pythons = sort { $a->{path} cmp $b->{path} } @pythons;
 
-#============================================================================
-# Prompt for library to use
-#============================================================================
 my $num = 1;
-my $lib = prompt(join("\n",("Found these Python libraries: ",
-			    map {$num++ . ". $_"} @py_libs_found))."\nUse? (or enter alternative)",
-		 "1") if @py_libs_found;
-$lib = prompt ("Couldn't find your Python library. Please enter the path to one:", "")
-  unless @py_libs_found;
+print "Found these python executables on your PATH:\n";
+print $num++ . ". " . $_->{path} . "\n" for @pythons;
 
-$lib = $py_libs_found[$lib-1] if $lib =~ /^\d+$/;
+my $sel = prompt("Use which?", '1');
+$sel = $pythons[$sel-1] if $sel =~ /^\d+$/;
+$sel = { path => $sel } unless ref $sel eq 'HASH';
 
-#============================================================================
-# Prompt for include directory to use
-#============================================================================
-$num = 1;
-my $inc = prompt(join("\n",("Found these Python include dirs: ",
-			    map {$num++ . ". $_"} @py_incs_found))."\nUse? (or enter alternative)",
-		 "1") if @py_incs_found;
-$inc = prompt ("Please enter the Python include directory.", "")
-  unless @py_incs_found;
-
-$inc = $py_incs_found[$inc-1] if $inc =~ /^\d+$/;
+print "Using $sel->{path}\n";
 
 #============================================================================
-# Does Python have Tkinter installed?
+# Interrogate the python interpreter (or the user) for required flags
 #============================================================================
-my $tkinter = prompt("Does this Python have Tkinter installed? Hint: run \"python -c 'import Tkinter'\" and watch for error messages.", "no") eq "yes";
+interrogate($sel);
+
+# Fix up the libpath and libpython
+substr($sel->{incpath}, 0, 0) = "-I";
+substr($sel->{libpath}, 0, 0) = "-L";
+$sel->{libpython} =~ s/lib(.*)(?:\.\Q$Config{dlext}\E|\Q$Config{_a}\E)/-l$1/;
+
+my @flags;
+push @flags, debug_flag() if defined $gdb;
+push @flags, '-DI_PY_DEBUG' if $debug;
+push @flags, 'none (perl Makefile.PL --help for details)' unless @flags;
+print <<END;
+Using These Settings:
+   Extra Libs:  $sel->{syslibs}
+   Python Lib:  $sel->{libpath} $sel->{libpython}
+   Includes:    $sel->{incpath}
+   Extra Flags: @flags
+END
 
 #============================================================================
-# Linker hints
+# Finalize, and write the makefile
 #============================================================================
-my %hints =
-  (
-   'python2.0' => ['-lpython2.0',
-		   '-ldb -lutil', # seems to always be required for 2.0
-		   ($Config{usethreads} && $Config{osname} ne 'MSWin32') ? "" : "-lpthread",
-		   $tkinter ? "-ltcl -ltk -ltix" : "",
-		  ],
-   'python1.6' => ['-lpython1.6',
-		   $tkinter ? "-ltcl -ltk -ltix" : "",
-		   ($Config{usethreads} && $Config{osname} ne 'MSWin32') ? "" : "-lpthread",
-		  ],
-   'python1.5' => ['-lpython1.5',
-		   $tkinter ? "-ltcl -ltk -ltix" : "",
-		   ($Config{usethreads} && $Config{osname} ne 'MSWin32') ? "" : "-lpthread",
-		  ],
-   # Win32 support:
-   'python20' => ['-lpython20'],
-   'python16' => ['-lpython16'],
-   'python15' => ['-lpython15'],
-  );
-
-my $pyver;
-for my $py (keys %hints) {
-    $pyver ||= (($lib =~ m|$py|i) ? $py : 0);
-}
-
-my $libs = join " ", @{$hints{$pyver}};
-
-#============================================================================
-# Write the makefile
-#============================================================================
-my $lib_path = substr($lib,0,rindex($lib,'/'));
-my $lib = substr($lib,rindex($lib,'/lib')+4);
-$lib = substr($lib,0,rindex($lib,'.'));
+$defs = join ' ', qw(-DEXPOSE_PERL -DCREATE_PYTHON -UCREATE_PERL),
+	$debug ? "-DI_PY_DEBUG" : ();
 
 WriteMakefile(
-	      INC => "-I$inc",
-	      LIBS => "-L$lib_path $libs",
+	      $defs ? (DEFINE => $defs) : (),
+	      defined $gdb  ? (OPTIMIZE => debug_flag()) : (),
+	      INC => $sel->{incpath},
+	      LIBS => (join " ", @$sel{qw(libpath libpython syslibs)}),
 	      NAME => 'Inline::Python',
 	      VERSION_FROM => 'Python.pm',
 	      PREREQ_PM => {
 			    Inline => 0.42,
 			   },
+	      OBJECT => 'Python.o py2pl.o perlmodule.o util.o',
 	      clean => {FILES => 'blib_test/'},
 	     );
+
+#============================================================================
+# Tries to ask the python interpreter what libraries we need, where its
+# include directories are, etc.
+#============================================================================
+sub interrogate {
+    my $ref = shift;
+    return query_options($ref) unless test_interrogate($ref);
+    $ref->{syslibs}   = get_config_var($ref, "LIBS");
+    $ref->{incpath}   = get_config_var($ref, "INCLUDEPY");
+    $ref->{libpath}   = get_config_var($ref, "LIBPL");
+    $ref->{libpython} = get_config_var($ref, "LIBRARY");
+    my $tmp = rindex($ref->{libpython}, '/') + 1;
+    $ref->{libpython} = substr($ref->{libpython}, $tmp);
+    $ref->{libpath} = join '/', (get_config_var($ref, "LIBDEST"),
+				 'config')
+      if ($ref->{libpath} eq 'None');
+    return query_options($ref) unless sanity_check($ref);
+}
+
+sub test_interrogate {
+    my $ref = shift;
+    `$ref->{path} -c "import distutils.sysconfig; distutils.sysconfig.get_config_var" 2>&1`;
+    print <<END if $?;
+
+This python is so old it doesn't know how to answer my questions.
+
+Instead, you will be asked a series of questions about it. If possible, 
+I will give you a set of reasonable options to choose from. You can 
+always enter the complete answer yourself if none of mine are correct.
+END
+    #' stupid vim.
+    return $? == 0 ? 1 : 0;
+}
+
+sub sanity_check {
+    my $ref = shift;
+    unless (-d $ref->{libpath} &&
+	    -d $ref->{incpath} &&
+	    (-f join '/', $ref->{libpath}, $ref->{libpython})
+	   ) {
+	print <<END and return 0;
+
+This python's configuration files are messed up. You'll have have to
+answer the questions yourself. Here is what Python said:
+
+   Extra Libs:  $sel->{syslibs}
+   Python Library:  $sel->{libpath}/$sel->{libpython}
+   Include Path:    $sel->{incpath}
+END
+    # ' stupid vim.
+    }
+    return 1;
+}
+
+sub get_config_var {
+    my $ref = shift;
+    my $key = shift;
+    my $exe = $ref->{path};
+    my $val = `$exe -c "import distutils.sysconfig; print distutils.sysconfig.get_config_var('$key')"`;
+    chomp $val;
+    return $val;
+}
+
+sub query_options {
+    my $ref = shift;
+
+    # Every python I've seen needs pthreads. Obviously not on windows.
+    my $libs_guess = $ref->{syslibs} ? $ref->{syslibs} : 
+		     $^O eq 'MSWin32' ? '' : '-lpthread';
+    print <<END;
+
+	1. LIBS option. I need to know what extra libraries, if any,  
+	   are required by this build of python. I recommend this:
+	   ${ $libs_guess ? \$libs_guess : \"No extra libraries" }
+
+END
+    $ref->{syslibs} = prompt("Enter extra libraries (e.g. -lfoo -lbar)", 
+			     $libs_guess);
+
+    print <<END;
+
+	2. LIBRARY option. The location of the python library. 
+	   Inline::Python needs to link against it to use Python.
+
+	Here are the libraries I know about:
+END
+    my @libs = show_python_libs($ref);
+    my $lib = prompt("Which? Or enter another.", '1');
+    $lib = $libs[$lib-1] if $lib =~ /^\d+$/;
+    $lib =~ s|\\|/|g;
+    $ref->{libpath} = substr($lib, 0, rindex($lib, '/'));
+    $ref->{libpython} = substr($lib, rindex($lib, '/')+1);
+
+    print <<END;
+
+	3. INCLUDE option. The location of the python include files.
+	   Inline::Python needs these to compile.
+
+	Here are the locations I know about:
+END
+    my @incs = show_python_incs($ref);
+    my $inc  = prompt("Which? Or enter another.", '1');
+    $inc = $incs[$inc-1] if $inc =~ /^\d+$/;
+    $ref->{incpath} = $inc;
+}
+
+#============================================================================
+# Python libraries to look for
+#============================================================================
+sub show_python_libs {
+  my $ref = shift;
+  my $exe = $ref->{path};
+
+  # Convert the exe into a glob where we might find a library:
+  $exe =~ s|[^/]+$||;
+  $exe .= "../lib/python*/config/libpython*";
+
+  my @py_libs = 
+   (
+   (map { $exe . $_ } '.a', '.so', '.lib'),
+   '/usr/lib/libpython*.a',
+   '/usr/lib/libpython*.so',
+   '/usr/lib/python*/config/libpython*.a',
+   '/usr/lib/python*/config/libpython*.so',
+   '/usr/local/lib/libpython*.a',
+   '/usr/local/lib/libpython*.so',
+   '/usr/local/ActivePython-*/lib/python*/config/libpython*.a',
+   '/usr/local/ActivePython-*/lib/python*/config/libpython*.so',
+
+   # Win32 support
+   'C:/Python*/libs/python*.lib',
+   'C:/Program Files/Python*/libs/python*.lib',
+  );
+
+  my (@found, %found);
+  push @found, grep { -f && $found{abspath($_)}++ == 0 } glob for @py_libs;
+  @found = sort map { abspath($_) } @found;
+  my $num = '1';
+  print "\t   " . $num++ . ") " . $_ . "\n" for @found;
+  print "\n";
+  return @found;
+}
+
+#============================================================================
+# Python include files to look for
+#============================================================================
+sub show_python_incs {
+  my $ref = shift;
+  my $exe = $ref->{path};
+
+  # Convert the exe into a glob where we might find the includes:
+  $exe =~ s|[^/]+$||;
+  $exe .= "../include/python*";
+
+  my @py_incs = 
+   (
+   $exe,
+   '/usr/local/ActivePython-*/include/python*',
+   '/usr/include/python*',
+   '/usr/local/include/python*',
+
+   # Win32 support
+   'C:/Python*/include',
+   'C:/Program Files/Python*/include',
+   );
+
+  my (@found, %found);
+  push @found, grep { -d && $found{abspath($_)}++ == 0 } glob for @py_incs;
+  @found = sort map { abspath($_) } @found;
+  my $num = 1;
+  print "\t   " . $num++ . ") " . $_ . "\n" for @found;
+  print "\n";
+  return @found;
+}
+
+# This can deal with files as well as directories
+sub abspath {
+    use Cwd qw(abs_path);
+    my ($path, $file) = shift;
+    if (-f $path) {
+	my @p = split '/', $path;
+        $path = join '/', @p[0..$#p-1]; # can't use -2 in a range
+	$file = $p[-1];
+    }
+    $path = abs_path($path);
+    return defined $file ? join '/', $path, $file : $path;
+}
+
+sub debug_flag {
+    return $gdb if $gdb;
+    $Config{osname} eq 'MSWin32' 	? return '-Zi' : return '-g';
+}
+
+sub usage {
+    print <<'END';
+Options:
+    -gdb:   Turn on compiler's debugging flag (use my guess).
+    -gdb=x  Pass your own debugging flag, not mine.
+    -debug: Turn on many diagnostic print statements inside Inline::Python.
+            This option is useful for tracing the execution path when
+            debugging.
+    -help:  This output.
+END
+# ' stupid vim
+    exit 0;
+}

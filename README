@@ -1,6 +1,6 @@
 INTRODUCTION:
 
-Inline::Python -- Write Perl subroutines in Python.
+Inline::Python -- Write Perl subs and classes in Python.
 
 Inline::Python lets you write Perl subroutines and classes in
 Python. You don't have to use any funky techniques for sharing most
@@ -21,40 +21,16 @@ When run, this complete program prints:
 
    Just Another Inline Hacker.
 
-The one line version is:
+The almost-one-line version is:
 
    perl -le 'use Inline Python=>q{def JAxH(x):return"Just Another %s Hacker"%x};print JAxH+Inline'
 
 -------------------------------------------------------------------------------
-FEATURES:
-
-Inline::Python version 0.15 is a minor upgrade with the following changes:
-
-+ Migrated to Inline version 0.42. Previous versions were incompatible with
-  the Inline-0.4x branch.
-
-Inline::Python version 0.14 is a minor upgrade with the following changes:
-
-+ Added ability to pass binary strings between Perl & Python. Previously,
-  the length of the string was calculated using strlen().
-
-Inline::Python version 0.13 is a minor upgrade with the following changes:
-
-+ Win32 code added to Makefile.PL to search for Python library and includes.
-+ GNU macro extensions removed to enable building under MSVC++.
-
-Other features of Inline::Python include:
-
-= Automatically interprets your Python code in an embedded interpreter.
-= Interrogates the Python interpreter about the namespace.
-= Caches the namespace so that subsequent runs load faster.
-= Translates Perl data into Python data on-the-fly.
-= Support for directly accessing the Python interpreter from Perl.
-
--------------------------------------------------------------------------------
 INSTALLATION:
 
-This module requires Inline.pm version 0.30 or higher to be installed.
+This module requires Inline.pm version 0.43 or higher to be installed. In 
+addition, you need Python 1.5.2 or greater installed. Python 2.0 or greater
+is recommended.
 
 To install Inline::Python do this:
 
@@ -66,21 +42,6 @@ make install
 (On ActivePerl for MSWin32, use nmake instead of make.)
 
 You have to 'make install' before you can run it successfully.
-
--------------------------------------------------------------------------------
-TROUBLESHOOTING:
-
-Python and Perl are very different beasts. Perl does "true" dynamic
-loading, so if you don't use a package you don't have to load
-it. Embedding Python seems to require that you link in all packages
-that Python *could* use. I'm not sure why this occurs yet. The
-solution I have so far is to look at which libraries Python has built
-into it, and include those into your project. This makes loading
-Python slower, but does not affect execution speed.
-
-Read the file TESTED and look for a setup similar to yours. The most
-likely cause of problems is compile flags being set wrong. You *may*
-have to edit Makefile.PL and type in extra compilation flags.
 
 -------------------------------------------------------------------------------
 INFORMATION:

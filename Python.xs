@@ -1,213 +1,83 @@
-#include "EXTERN.h"
+/* -*- C -*- */
+#include "EXTERN.h" 
 #include "perl.h"
 #include "XSUB.h"
 
 #include "Python.h"
+#include "py2pl.h"
+#include "util.h"
 
-int _python_argc;
-char *_python_argv[] = {
-  "python",
-};
-
-#define Printf(x) 
-//#define Printf(x) printf x
-
-#ifndef SvPV_nolen
-static STRLEN n_a;
-#define SvPV_nolen(x) SvPV(x,n_a)
+#ifdef EXPOSE_PERL
+#include "perlmodule.h"
 #endif
 
-/****************************
- * SV* Py2Pl(PyObject *obj) 
+/* To save a little time, I check the calling context and don't convert
+ * the arguments if I'm in void context, flatten lists in list context,
+ * and return only one element in scalar context.
  * 
- * Converts arbitrary Python data structures to Perl data structures
- * Note on references: does not Py_DECREF(obj).
- ****************************/
-SV* Py2Pl (PyObject *obj, char *perl_class) {
-   /* Here is how it does it:
-    * o If obj is a String, Integer, or Float, we convert it to an SV;
-    * o If obj is a List or Tuple, we convert it to an AV;
-    * o If obj is a Dictionary, we convert it to an HV.
-    */
-    if (PyInstance_Check(obj)) {
-      /* This is a Python class instance -- bless it into a Perl package */
-      SV *inst_ptr = newSViv(0);
-      SV *inst = newSVrv(inst_ptr, perl_class);
-      sv_setiv(inst, (IV)obj);
-      SvREADONLY_on(inst);
-      return inst_ptr;
-    }
-    else if (PySequence_Check(obj) && !PyString_Check(obj)) {
-       AV *retval = newAV();
-       int i;
-       int sz = PySequence_Length(obj);
+ * If this turns out to be a bad idea, it's easy enough to turn off.
+ */
+#define CHECK_CONTEXT
 
-       Printf(("sequence (%i)\n",sz));
+#ifdef CREATE_PYTHON
+void do_pyinit() {
+#ifdef EXPOSE_PERL
+  PyObject *main_dict;
+  PyObject *perl_obj;
 
-       for (i=0; i<sz; i++) {
-         PyObject *tmp = PySequence_GetItem(obj,i); /* new reference */
-         SV* next = Py2Pl(tmp,perl_class);
-         av_push(retval, next);
-         Py_DECREF(tmp);
-       }
-       return newRV_noinc((SV*) retval);
-    }
-    else if (PyMapping_Check(obj)) {
-       HV *retval = newHV();
-       int i;
-       int sz = PyMapping_Length(obj);
-       PyObject *keys = PyMapping_Keys(obj);              /* new reference */
-       PyObject *vals = PyMapping_Values(obj);            /* new reference */
+  PyObject *dummy1 = PyString_FromString(""), 
+           *dummy2 = PyString_FromString("main");
+#endif
+  /* sometimes Python needs to know about argc and argv to be happy */
+  int _python_argc = 1;
+  char *_python_argv[] = {
+    "python",
+  };
 
-       Printf(("mapping (%i)\n",sz));
+  Py_SetProgramName("python");
+  Py_Initialize();
+  PySys_SetArgv(_python_argc, _python_argv);  /* Tk needs this */
 
-       for (i=0; i<sz; i++) {
-           PyObject *key = PySequence_GetItem(keys,i);    /* new reference */
-           PyObject *val = PySequence_GetItem(vals,i);    /* new reference */
-       
-           SV* sv_val = Py2Pl(val,perl_class);
-           U32 hash;
-           char *key_val;
-       
-           if (!PyString_Check(key)) {
-             /* Warning -- encountered a non-string key value while converting a 
-              * Python dictionary into a Perl hash. Perl can only use strings as 
-              * key values. Using Python's string representation of the key as 
-              * Perl's key value.
-              */
-             PyObject *s = PyObject_Str(key);
-	     key_val = PyString_AsString(s);
-             Py_DECREF(s);
-           }
-             else {
-             key_val = PyString_AsString(key);
-           }
+#ifdef EXPOSE_PERL
+  /* create the perl module and add functions */
+  initperl();
 
-           if (!key_val) {
-              croak("Invalid key on %i%s key of mapping\n", i, i ? ( (i==1) ? "st" : ( (i==2) ? "nd" : ( (i==3) ? "rd" : "th"))) : "th");
-           }
+  /* now -- create the main 'perl' object and add it to the dictionary. */
+  perl_obj = newPerlPkg_object(dummy1,dummy2);
+  main_dict = PyModule_GetDict(PyImport_AddModule("__main__"));
+  PyDict_SetItemString(main_dict, "perl", perl_obj);
 
-           PERL_HASH(hash,key_val,strlen(key_val));
-           hv_store(retval,key_val,strlen(key_val),sv_val,hash);
-           Py_DECREF(key);
-           Py_DECREF(val);
-       }
-       Py_DECREF(keys);
-       Py_DECREF(vals);
-       return newRV_noinc((SV*)retval);
-    }
-    else {
-       PyObject *string = PyObject_Str(obj);  /* new reference */
-       char *str = PyString_AsString(string);
-       SV* s2 = newSVpv(str,PyString_Size(string));
-       Py_DECREF(string);
-       return s2;
-    }
+  Py_DECREF(dummy1); 
+  Py_DECREF(dummy2);
+#endif
 }
-
-/****************************
- * SV* Pl2Py(PyObject *obj) 
- * 
- * Converts arbitrary Perl data structures to Python data structures
- ****************************/
-PyObject *Pl2Py (SV *obj) {
-   PyObject *o;
-
-   if (SvIOKp(obj)) {
-      Printf(("integer\n"));
-      o = PyInt_FromLong((long)SvIV(obj)); 
-   }
-   else if (SvNOKp(obj)) { 
-      PyObject *tmp = PyString_FromString(SvPV_nolen(obj));
-      Printf(("float\n"));
-      if (tmp)
-	o = PyNumber_Float(tmp);
-      else {
-	 croak("Internal Error -- your Perl string \"%s\" could not be converted to a Python string", SvPV_nolen(obj));
-      }
-      Py_DECREF(tmp);
-   }
-   else if (SvPOKp(obj)) {
-      STRLEN num;
-      char *str = SvPV(obj,num);
-      Printf(("string = "));
-      Printf(("%s\n", str));
-      o = PyString_FromStringAndSize(str,num);
-      Printf(("string ok\n"));
-   }
-   else if (SvROK(obj) && SvTYPE(SvRV(obj))==SVt_PVAV) {
-      AV* av = (AV*) SvRV(obj);
-      int i;
-      int len = av_len(av) + 1;
-      o = PyTuple_New(len);
-
-      Printf(("array (%i)\n", len));
-
-      for (i=0; i<len; i++) {
-          SV *tmp = av_shift(av);
-          PyTuple_SetItem(o,i,Pl2Py(tmp));
-      }
-   } 
-   else if (SvROK(obj) && SvTYPE(SvRV(obj))==SVt_PVHV) {
-      HV* hv = (HV*) SvRV(obj);
-      PyObject *dict = PyDict_New();
-      int len = hv_iterinit(hv);
-      int i;
-
-      Printf(("hash (%i)\n", len));
-
-      for (i=0; i<len; i++) {
-          HE *next = hv_iternext(hv);
-          I32 n_a;
-          char *key = hv_iterkey(next,&n_a);
-          PyObject *val = Pl2Py ( hv_iterval(hv, next) );
-	  PyDict_SetItemString(dict,key,val); 
-          Py_DECREF(val);                              
-      }
-
-      Printf(("returning from hash conversion.\n"));
-
-      return dict;
-   }
-   else if (SvROK(obj) && SvTYPE(SvRV(obj))==SVt_PVMG) {
-      /* this is a blessed scalar -- hopefully the scalar contains a PyObject*
-       * which we can dereference and return as-is. 
-       */
-      SV* obj_deref = SvRV(obj);
-      IV ptr = SvIV(obj_deref);
-
-      if (!ptr) {
-        croak("Pl2Py() caught NULL PyObject pointer. Are you using a Python object?\n");
-      }
-      return (PyObject*)ptr;
-   }
-   else {
-      croak("Internal error -- unsupported Perl datatype.\n");
-      return PyString_FromString("Error converting perl structure.");
-   }
-   Printf(("returning from Pl2Py\n"))
-   return o;
-}
+#endif
 
 MODULE = Inline::Python   PACKAGE = Inline::Python
 
 BOOT:
-Py_Initialize();
-PySys_SetArgv(_python_argc, _python_argv);  /* Tk needs this */
+#ifdef CREATE_PYTHON
+do_pyinit();
+#endif
 
 PROTOTYPES: DISABLE
 
 void 
-_Inline_parse_python_namespace()
+py_study_package(PYPKG="__main__")
+     char*   PYPKG
  PREINIT:
-  PyObject *mod = PyImport_AddModule("__main__");
-  PyObject *dict = PyModule_GetDict(mod);
-  PyObject *keys = PyMapping_Keys(dict);
-  int len = PyObject_Length(dict);
+  PyObject *mod;
+  PyObject *dict;
+  PyObject *keys;
+  int len;
   int i;
   AV* functions = newAV();
   HV* classes = newHV();
  PPCODE:
+  mod = PyImport_AddModule(PYPKG);
+  dict = PyModule_GetDict(mod);
+  keys = PyMapping_Keys(dict);
+  len = PyObject_Length(dict);
   for (i=0; i<len; i++) {
     PyObject *key = PySequence_GetItem(keys,i);
     PyObject *val = PyObject_GetItem(dict,key);
@@ -227,7 +97,6 @@ _Inline_parse_python_namespace()
 	/* array of method names */
 	AV* methods = newAV();
 	AV* bases = newAV();
-	U32 hash;
 
 	Printf(("Found a class: %s\n", name));
 
@@ -242,48 +111,60 @@ _Inline_parse_python_namespace()
 	  }
 	}
 
-	PERL_HASH(hash, name, strlen(name));
-	hv_store(classes,name,strlen(name),newRV_noinc((SV*)methods),hash);
+	hv_store(classes,name,strlen(name),newRV_noinc((SV*)methods), 0);
       }
     }
   }
   /* return an expanded hash */
-  PUSHs(newSVpv("functions",0));
-  PUSHs(newRV_noinc((SV*)functions));
-  PUSHs(newSVpv("classes", 0));
-  PUSHs(newRV_noinc((SV*)classes));
+  XPUSHs(newSVpv("functions",0));
+  XPUSHs(newRV_noinc((SV*)functions));
+  XPUSHs(newSVpv("classes", 0));
+  XPUSHs(newRV_noinc((SV*)classes));
 
-int 
-_eval_python(x)
-	char *x;
+SV *
+py_eval(str, type=1)
+	char *str
+	int type
+    PREINIT:
+	PyObject *	main_module;
+	PyObject *	globals;
+	PyObject *	locals;
+	PyObject *	py_result;
+	int 		context;
     CODE:
-	RETVAL = (PyRun_SimpleString(x) >= 0);
+	Printf(("py_eval: code: %s\n", str));
+	main_module = PyImport_AddModule("__main__");
+	Printf(("py_eval: main_module=%p\n", main_module));
+	globals = PyModule_GetDict(main_module);
+	Printf(("py_eval: globals=%p\n", globals));
+	locals = globals;
+	context = (type == 0) ? Py_eval_input : 
+		  (type == 1) ? Py_file_input : 
+				Py_single_input;
+	Printf(("py_eval: type=%i\n", type));
+	Printf(("py_eval: context=%i\n", context));
+	py_result = PyRun_String(str, context, globals, locals);
+	if (!py_result) {
+		PyErr_Print();
+		croak("Error -- py_eval raised an exception");
+		XSRETURN_EMPTY;
+	}
+	RETVAL = Py2Pl(py_result);
+	Py_DECREF(py_result);
     OUTPUT:
 	RETVAL
 
-void 
-_destroy_python_object(obj)
-	SV* obj;
-  CODE:
-      if (SvROK(obj) && SvTYPE(SvRV(obj))==SVt_PVMG) {
-	SV* obj_deref = SvRV(obj);
-      	IV ptr = SvIV(obj_deref);
-      	PyObject *py_object;
-        if (!ptr) {
-          croak("destroy_python_object caught NULL PyObject pointer. Are you using a Python object?\n");
-        }
-        py_object = (PyObject*)ptr;
-        Py_DECREF(py_object);
-      }
+#undef  NUM_FIXED_ARGS
+#define NUM_FIXED_ARGS 2
 
 void
-_eval_python_function(PKG, FNAME...)
-     char*    PKG;
+py_call_function(PYPKG, FNAME, ...)
+     char*    PYPKG;
      char*    FNAME;
   PREINIT:
   int i;
 
-  PyObject *mod       = PyImport_AddModule("__main__");
+  PyObject *mod       = PyImport_AddModule(PYPKG);
   PyObject *dict      = PyModule_GetDict(mod);
   PyObject *func      = PyMapping_GetItemString(dict,FNAME);
   PyObject *o         = NULL;
@@ -294,41 +175,61 @@ _eval_python_function(PKG, FNAME...)
 
   PPCODE:
 
+  Printf(("py_call_function\n"));
+  Printf(("package: %s\n", PYPKG));
   Printf(("function: %s\n", FNAME));
 
   if (!PyCallable_Check(func)) {
-    warn("Error -- Python function %s is not a callable object\n",
-	 FNAME);
+    croak("'%s' is not a callable object", FNAME);
     XSRETURN_EMPTY;
   }
 
-  Printf(("function is callable!\n"));
+  Printf(("function '%s' is callable!\n", FNAME));
   
-  tuple = PyTuple_New(items-2);
+  tuple = PyTuple_New(items-NUM_FIXED_ARGS);
   
-  for (i=2; i<items; i++) {
+  for (i=NUM_FIXED_ARGS; i<items; i++) {
     o = Pl2Py(ST(i));
     if (o) {
-      PyTuple_SetItem(tuple, i-2, o);
+      PyTuple_SetItem(tuple, i-NUM_FIXED_ARGS, o);
     }
   }
   Printf(("calling func\n"));
   py_retval = PyObject_CallObject(func, tuple);
   Printf(("received a response\n"));
   if (!py_retval || (PyErr_Occurred() != NULL)) {
+    fprintf(stderr,"Error: Python error occurred:\n");
     PyErr_Print();
-    Py_DECREF(tuple);
-    Py_DECREF(func);
+    Py_XDECREF(tuple);
+    Py_XDECREF(func);
     croak("Error -- PyObject_CallObject(...) failed.\n");
     XSRETURN_EMPTY;
   }
-  Printf(("no error -- calling Py2Pl()\n"));
-  ret = Py2Pl(py_retval, PKG);
-  if (!PyClass_Check(func))
-    Py_DECREF(py_retval); /* don't decrement it if we're saving it for later */
+  Printf(("no error\n"));
+#ifdef CHECK_CONTEXT
+  Printf(("GIMME_V=%i\n", GIMME_V));
+  Printf(("GIMME=%i\n", GIMME));
+  Printf(("G_VOID=%i\n", G_VOID));
+  Printf(("G_ARRAY=%i\n", G_ARRAY));
+  Printf(("G_SCALAR=%i\n", G_SCALAR));
+
+  /* We can save a little time by checking our context */
+  /* For whatever reason, GIMME_V always returns G_VOID when we get forwarded
+   * from eval_python(). 
+   */
+  if (GIMME_V == G_VOID)
+    XSRETURN_EMPTY;
+#endif
+
+  Printf(("calling Py2Pl\n"));
+  ret = Py2Pl(py_retval);
+  Py_DECREF(py_retval);
   
-  if (SvROK(ret) && (SvTYPE(SvRV(ret)) == SVt_PVAV)) {
-    /* if it is an array, return the array elements ourselves. */
+  if (
+#ifdef CHECK_CONTEXT
+      (GIMME_V == G_ARRAY) &&
+#endif
+      SvROK(ret) && (SvTYPE(SvRV(ret)) == SVt_PVAV)) {
     AV* av = (AV*)SvRV(ret);
     int len = av_len(av) + 1;
     int i;
@@ -339,11 +240,13 @@ _eval_python_function(PKG, FNAME...)
     XPUSHs(ret);
   }
 
+#undef  NUM_FIXED_ARGS
+#define NUM_FIXED_ARGS 2
+
 void
-_eval_python_method(pkg, mname, _inst, ...)
-	char*	pkg;
-	char*	mname;
+py_call_method(_inst, mname, ...)
 	SV*	_inst;
+	char*	mname;
   PREINIT:
 
   PyObject *inst;
@@ -363,41 +266,69 @@ _eval_python_method(pkg, mname, _inst, ...)
   if (SvROK(_inst) && SvTYPE(SvRV(_inst))==SVt_PVMG) {
     inst = (PyObject*)SvIV(SvRV(_inst));
   }
+  else {
+    croak("Object did not have Inline::Python::Object magic");
+    XSRETURN_EMPTY;
+  }
+
+  Printf(("inst {%p} successfully passed the PVMG test\n", inst));
 
   if (!PyInstance_Check(inst)) {
-    warn("Error -- Python_Call_Method() must receive a Python class instance!\n");
+    croak("Attempted to call method '%s' on a non-instance", mname);
     XSRETURN_EMPTY;
   }
+
+  Printf(("inst is indeed a Python Instance\n"));
 
   if (!PyObject_HasAttrString(inst, mname)) {
-    warn("Error -- Python object has no method named %s", mname);
+    croak("Python object has no method named %s", mname);
     XSRETURN_EMPTY;
   }
 
+  Printf(("inst has an attribute named '%s'\n", mname));
+
   method = PyObject_GetAttrString(inst,mname);
-  tuple = PyTuple_New(items-3);
-  for (i=3; i<items; i++) {
+
+  if (!PyCallable_Check(method)) {
+    croak("Attempted to call non-method '%s'", mname);
+    XSRETURN_EMPTY;
+  }
+
+  tuple = PyTuple_New(items-NUM_FIXED_ARGS);
+  for (i=NUM_FIXED_ARGS; i<items; i++) {
     PyObject *o = Pl2Py(ST(i));
     if (o) {
-      PyTuple_SetItem(tuple, i-3, o);
+      PyTuple_SetItem(tuple, i-NUM_FIXED_ARGS, o);
     }
   }
 
   Printf(("calling func\n"));
   py_retval = PyObject_CallObject(method, tuple);
   Printf(("received a response\n"));
-  if (!py_retval && (PyErr_Occurred() != NULL)) {
+  if (!py_retval || (PyErr_Occurred() != NULL)) {
     PyErr_Print();
     Py_DECREF(tuple);
     Py_DECREF(method);
-    croak("Error -- PyObject_CallObject(...) failed.\n");
+    croak("PyObject_CallObject(...) failed.\n");
     XSRETURN_EMPTY;
   }
-  Printf(("no error -- calling Py2Pl()\n"));
-  ret = Py2Pl(py_retval, pkg);
+
+  Printf(("no error\n"));
+#ifdef CHECK_CONTEXT
+  /* We can save a little time by checking our context */
+  if (GIMME_V == G_VOID)
+    XSRETURN_EMPTY;
+#endif
+
+  Printf(("calling Py2Pl()\n"));
+  ret = Py2Pl(py_retval);
   Py_DECREF(py_retval);
   
-  if (SvROK(ret) && (SvTYPE(SvRV(ret)) == SVt_PVAV)) {
+  if (
+#ifdef CHECK_CONTEXT
+      GIMME_V == G_ARRAY && 
+#endif
+      SvROK(ret) && (SvTYPE(SvRV(ret)) == SVt_PVAV)) {
     /* if it is an array, return the array elements ourselves. */
     AV* av = (AV*)SvRV(ret);
     int len = av_len(av) + 1;
@@ -409,3 +340,19 @@ _eval_python_method(pkg, mname, _inst, ...)
     XPUSHs(ret);
   }
 
+MODULE = Inline::Python   PACKAGE = Inline::Python::Object
+
+void
+DESTROY(obj)
+        SV* obj;
+  CODE:
+      if (SvROK(obj) && SvTYPE(SvRV(obj))==SVt_PVMG) {
+        SV* obj_deref = SvRV(obj);
+        IV ptr = SvIV(obj_deref);
+        PyObject *py_object;
+        if (!ptr) {
+          croak("destroy_python_object caught NULL PyObject pointer. Are you using a Python object?\n");
+        }
+        py_object = (PyObject*)ptr;
+        Py_DECREF(py_object);
+      }

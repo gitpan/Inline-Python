@@ -1,5 +1,26 @@
 Revision history for Perl extension Inline::Python.
 
+0.20  Mon Jul  9 16:46:56 PDT 2001
+	- Made the Makefile.PL more clever about how it picks debugging 
+	  information. It accepts an optional argument, too, so it's
+	  easy to correct the mistakes.
+
+0.20  Wed Jun 20 16:27:23 PDT 2001
+	- Lots of testing with different versions of Perl & Python
+	- Makefile.PL auto-detects configuration for python >= 2.0
+
+0.20  Sun Jun 17 19:57:18 PDT 2001
+	- Made eval_python return results of running code
+	- py_bind_class(), py_bind_function(), and py_study_package()
+	- py_eval() and py_call_function()
+	- py_new_object() and py_call_method()
+	- Many new test cases
+	- Updated documentation
+	- New language alias 'PYTHON' for Inline::Files support
+	- 'FILTERS' Config option
+	- Removed 'PRIVATE_PRIFIXES' Config option
+	- Added new base class Inline::Python::Object for all objects.
+
 0.15  Sun Jun 10 18:39:23 PDT 2001
 	- Ported to Inline 0.42.
 

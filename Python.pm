@@ -1,48 +1,29 @@
 package Inline::Python;
-
 use strict;
 use Carp;
 require Inline;
 require DynaLoader;
 require Exporter;
-
 use vars qw(@ISA $VERSION @EXPORT_OK);
 @ISA = qw(Inline DynaLoader Exporter);
-$VERSION = '0.15';
+$VERSION = '0.20';
+@EXPORT_OK = qw(py_eval
+		py_new_object
+		py_call_method 
+		py_call_function
+		py_bind_class
+		py_bind_func
+		py_study_package
+		eval_python
+	       );
 
-@EXPORT_OK = qw(eval_python);
-
-#==============================================================================
-# Load (and initialize) the Python Interpreter
-#==============================================================================
-sub dl_load_flags { 0x01 }
-Inline::Python->bootstrap($VERSION);
-
-#==============================================================================
-# Allow 'use Inline::Python qw(eval_python)'
-#==============================================================================
+# Prevent Inline's import from complaining
 sub import {
     Inline::Python->export_to_level(1,@_);
 }
 
-#==============================================================================
-# Provide an overridden function for evaluating Python code
-#==============================================================================
-sub eval_python {
-    if (scalar @_ == 1) {
-	return _eval_python(@_);
-    }
-    elsif ((scalar @_ < 3) or not (ref $_[2] =~ /::/)) {
-	return _eval_python_function(@_);
-    }
-    elsif ((scalar @_ >= 3) and (ref $_[2] =~ /::/)) {
-	return _eval_python_method(@_);
-    }
-    else {
-	croak "Invalid use of eval_python()." .
-	  " See 'perldoc Inline::Python' for details";
-    }
-}
+sub dl_load_flags { 0x01 }
+Inline::Python->bootstrap($VERSION);
 
 #==============================================================================
 # Register Python.pm as a valid Inline language
@@ -50,7 +31,7 @@ sub eval_python {
 sub register {
     return {
 	    language => 'Python',
-	    aliases => ['py', 'python'],
+	    aliases => ['py', 'python', 'PYTHON'],
 	    type => 'interpreted',
 	    suffix => 'pydat',
 	   };
@@ -65,7 +46,6 @@ sub validate {
     $o->{ILSM} = {};
     $o->{ILSM}{FILTERS} = [];
     $o->{ILSM}{AUTO_INCLUDE} = {};
-    $o->{ILSM}{PRIVATE_PREFIXES} = [];
     $o->{ILSM}{built} = 0;
     $o->{ILSM}{loaded} = 0;
 
@@ -75,9 +55,6 @@ sub validate {
 	if ($key eq 'AUTO_INCLUDE') {
 	    add_string($o->{ILSM}{AUTO_INCLUDE}, $key, $value, '');
 	    warn "AUTO_INCLUDE has not been implemented yet!\n";
-	}
-	elsif ($key eq 'PRIVATE_PREFIXES') {
-	    add_list($o->{ILSM}, $key, $value, []);
 	}
 	elsif ($key eq 'FILTERS') {
 	    next if $value eq '1' or $value eq '0'; # ignore ENABLE, DISABLE
@@ -109,6 +86,10 @@ sub validate {
 	}
 	next;
     }
+}
+
+sub usage_validate {
+    return "Invalid value for config option $_[0]";
 }
 
 sub add_list {
@@ -154,15 +135,14 @@ sub add_text {
     }
 }
 
-###########################################################################
+#==========================================================================
 # Print a short information section if PRINT_INFO is enabled.
-###########################################################################
+#==========================================================================
 sub info {
     my $o = shift;
     my $info =  "";
 
     $o->build unless $o->{ILSM}{built};
-    $o->load unless $o->{ILSM}{loaded};
 
     my @functions = @{$o->{ILSM}{namespace}{functions}||[]};
     $info .= "The following Python functions have been bound to Perl:\n"
@@ -182,51 +162,28 @@ sub info {
     return $info;
 }
 
-###########################################################################
-# Use Python to Parse the code, then extract all newly created functions
-# and save them for future loading
-###########################################################################
+#==========================================================================
+# Run the code, study the main namespace, and cache the results.
+#==========================================================================
 sub build {
     my $o = shift;
-    return if $o->{ILSM}{built};
+    return if $o->{ILSM}{cached};
 
+    # Filter the code
     $o->{ILSM}{code} = $o->filter(@{$o->{ILSM}{FILTERS}});
 
-    croak "Couldn't parse your Python code.\n" 
-      unless _eval_python($o->{ILSM}{code});
+    # Run the code
+    py_eval($o->{ILSM}{code});
+    $o->{ILSM}{evaluated}++;
 
-    my %namespace = _Inline_parse_python_namespace();
-
-    my @filtered;
-    for my $func (@{$namespace{functions}}) {
-	my $private = 0;
-	for my $prefix (@{$o->{ILSM}{PRIVATE_PREFIXES}}) {
-	    ++$private and last
-	      if substr($func, 0, length($prefix)) eq $prefix;
-	}
-	push @filtered, $func
-	  unless $private;
-    }
-    $namespace{functions} = \@filtered;
-
-    for my $class(keys %{$namespace{classes}}) {
-	my @filtered;
-	for my $method (@{$namespace{classes}{$class}}) {
-	    my $private = 0;
-	    for my $prefix (@{$o->{ILSM}{PRIVATE_PREFIXES}}) {
-		++$private and last
-		  if substr($method, 0, length($prefix)) eq $prefix;
-	    }
-	    push @filtered, $method 
-	      unless $private;
-	}
-	$namespace{classes}{$class} = \@filtered;
-    }
+    # Study the main namespace
+    my %namespace = py_study_package('__main__');
 
     warn "No functions or classes found!"
       unless ((length @{$namespace{functions}}) > 0 and
 	      (length keys %{$namespace{classes}}) > 0);
 
+    # Cache the results
     require Inline::denter;
     my $namespace = Inline::denter->new
       ->indent(
@@ -234,7 +191,6 @@ sub build {
 	       *filtered => $o->{ILSM}{code},
 	      );
 
-    # if all was successful
     $o->mkpath("$o->{API}{install_lib}/auto/$o->{API}{modpname}");
 
     open PYDAT, "> $o->{API}{location}" or
@@ -242,17 +198,18 @@ sub build {
     print PYDAT $namespace;
     close PYDAT;
 
-    $o->{ILSM}{built}++;
+    $o->{ILSM}{namespace} = \%namespace;
+    $o->{ILSM}{cached}++;
 }
 
 #==============================================================================
-# Load and Run the Python Code, then export all functions from the pydat 
-# file into the caller's namespace
+# Load the code, run it, and bind everything to Perl
 #==============================================================================
 sub load {
     my $o = shift;
     return if $o->{ILSM}{loaded};
 
+    # Load the code
     open PYDAT, $o->{API}{location} or 
       croak "Couldn't open parse info!";
     my $pydat = join '', <PYDAT>;
@@ -262,52 +219,110 @@ sub load {
     my %pydat = Inline::denter->new->undent($pydat);
     $o->{ILSM}{namespace} = $pydat{namespace};
     $o->{ILSM}{code} = $pydat{filtered};
+
+    # Run it
+    py_eval($o->{ILSM}{code}) unless $o->{ILSM}{evaluated};
+
+    # Bind it all
+    py_bind_func($o->{API}{pkg} . "::$_", '__main__', $_)
+      for (@{ $o->{ILSM}{namespace}{functions} || {} });
+    py_bind_class($o->{API}{pkg} . "::$_", '__main__', $_,
+		  @{$o->{ILSM}{namespace}{classes}{$_}})
+      for keys %{ $o->{ILSM}{namespace}{classes} || {} };
     $o->{ILSM}{loaded}++;
-
-    _eval_python($o->{ILSM}{code});
-
-    # bind some perl functions to the caller's namespace
-    for my $function (@{$o->{ILSM}{namespace}{functions}||{}}) {
-	my $s = "*::" . "$o->{API}{pkg}";
-	$s .= "::$function = sub { ";
-	$s .= "Inline::Python::_eval_python_function";
-	$s .= "(__PACKAGE__,\"$function\", \@_) }";
-	eval $s;
-	croak $@ if $@;
-    }
-
-    for my $class (keys %{$o->{ILSM}{namespace}{classes}||{}}) {
-	my $s = <<END;
-package $o->{API}{pkg}::$class;
-
-sub AUTOLOAD {
-    no strict;
-    use Data::Dumper;
-    \$AUTOLOAD =~ s|.*::(\\w+)|\$1|;
-    Inline::Python::_eval_python_method(__PACKAGE__,\$AUTOLOAD,\@_);
 }
 
+#==============================================================================
+# Wrap a Python function with a Perl sub which calls it.
+#==============================================================================
+sub py_bind_func {
+    my $perlfunc = shift;	# What Perl package should the wrapper be in?
+    my $pypkg = shift;		# What Python package does it come from?
+    my $function = shift;	# What is the name of the Python function?
+
+    my $bind = <<END;
+sub $perlfunc {
+    unshift \@_, "$pypkg", "$function";
+    return &Inline::Python::py_call_function;
+}
+END
+
+    eval $bind;
+    croak $@ if $@;
+}
+
+#==============================================================================
+# Wrap a Python class in a Perl package. We wrap every method we know about, 
+# and we inherit from Inline::Python::Object so the Perverse Python Programmer 
+# can still create dynamic methods on-the-fly using its AUTOLOAD.
+#==============================================================================
+sub py_bind_class {
+    my $pkg = shift;
+    my $pypkg = shift;
+    my $class = shift;
+    my @methods = @_;
+
+    my $bind = <<END;
+package ${pkg};
+\@${pkg}::ISA = qw(Inline::Python::Object);
+
+# We create new objects by invoking the class as a function
 sub new {
-    Inline::Python::_eval_python_function(shift,\"$class\",\@_);
-}
-
-sub DESTROY {
-    Inline::Python::_destroy_python_object(\@_);
+    splice \@_, 1, 0, "$pypkg", "$class";
+    return &Inline::Python::py_new_object;
 }
 
 END
 
-	for my $method ( @{$o->{ILSM}{namespace}{classes}{$class}}) {
-	    next if $method eq '__init__';
-	    $s .= "sub $method {Inline::Python::_eval_python_method";
-	    $s .= "(__PACKAGE__,\"$method\",\@_)} ";
-	}
+    for my $method (@methods) {
+	$bind .= <<END;
 
-	eval $s;
-	croak $@ if $@;
+# Methods are wrapped just as in AUTOLOAD
+sub $method {
+    splice \@_, 1, 0, "$method";
+    return &Inline::Python::py_call_method
+}
+END
     }
+
+    eval $bind;
+    croak $@ if $@;
+}
+
+#==============================================================================
+# An overridden function to do everything in one bite
+# Note: the eval{} catches the case where $_[0] isn't blessed.
+#==============================================================================
+sub eval_python {
+    return &py_call_method	if eval{$_[0]->isa("Inline::Python::Object")};
+    return &py_eval		if @_ == 1 || $_[1] =~ /^\d+$/;
+    return &py_call_function	if @_ >= 2;
+    croak "Invalid use of eval_python. See 'perldoc Inline::Python'";
+}
+
+#==============================================================================
+# A more pleasing name than py_call_function, which is what really happens
+#==============================================================================
+sub py_new_object {
+    return &Inline::Python::Object::new;
+}
+
+#==============================================================================
+# We provide Inline::Python::Object as a base class for Python objects. It
+# knows how to create, destroy, and call methods on objects.
+#==============================================================================
+package Inline::Python::Object;
+
+sub new {
+    my $perlpkg = shift;
+    return bless &Inline::Python::py_call_function, $perlpkg;
+}
+
+sub AUTOLOAD {
+    no strict;
+    $AUTOLOAD =~ s|.*::(\w+)|$1|;
+    splice @_, 1, 0, $AUTOLOAD;
+    return &Inline::Python::py_call_method;
 }
 
 1;
-
-__END__
