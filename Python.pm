@@ -8,7 +8,7 @@ require Exporter;
 
 use vars qw(@ISA $VERSION @EXPORT_OK);
 @ISA = qw(Inline DynaLoader Exporter);
-$VERSION = '0.10';
+$VERSION = '0.11';
 
 @EXPORT_OK = qw(eval_python);
 
@@ -25,7 +25,7 @@ sub import {
 }
 
 #==============================================================================
-# Register Python.pm as a valid Inline language
+# Provide an overridden function for evaluating Python code
 #==============================================================================
 sub eval_python {
     if (scalar @_ == 1) {

@@ -1,4 +1,4 @@
-use Inline Config => BLIB => './blib_test';
+use Inline Config => DIRECTORY => './blib_test';
 
 BEGIN {
    print "1..2\n";

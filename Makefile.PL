@@ -132,7 +132,7 @@ WriteMakefile(
 	      NAME => 'Inline::Python',
 	      VERSION_FROM => 'Python.pm',
 	      PREREQ_PM => {
-			    Inline => 0.30,
+			    Inline => 0.31,
 			   },
 	      clean => {FILES => 'blib_test/'},
 	     );
