@@ -78,16 +78,25 @@ py_study_package(PYPKG="__main__")
   dict = PyModule_GetDict(mod);
   keys = PyMapping_Keys(dict);
   len = PyObject_Length(dict);
+  Printf(("py_study_package: dict length: %i\n", len));
   for (i=0; i<len; i++) {
     PyObject *key = PySequence_GetItem(keys,i);
     PyObject *val = PyObject_GetItem(dict,key);
     if (PyCallable_Check(val)) {
+#ifdef I_PY_DEBUG
+	printf("py_study_package: #%i (%s) callable\n", i, PyString_AsString(key));
+	printf("val:\n\t");
+	PyObject_Print(val, stdout, Py_PRINT_RAW);
+	printf("\n");
+	printf("object type check gives: %i\n", PyType_Check(val));
+#endif
       if (PyFunction_Check(val)) {
         char *name = PyString_AsString(key);
         Printf(("Found a function: %s\n", name));
 	av_push(functions, newSVpv(name,0));
       }
-      else if (PyClass_Check(val)) {
+      /* elw: if we just could get it to go through here! */
+      else if (PyType_Check(val) || PyClass_Check(val)) {
         char *name = PyString_AsString(key);
 	PyObject *cls_dict = PyObject_GetAttrString(val,"__dict__");
 	PyObject *cls_keys = PyMapping_Keys(cls_dict);
@@ -108,6 +117,9 @@ py_study_package(PYPKG="__main__")
 	  if (PyFunction_Check(cls_val)) {
 	    Printf(("Found a method of %s: %s\n", name, fname));
 	    av_push(methods,newSVpv(fname,0));
+	  }
+	  else {
+	    Printf(("not a method %s: %s\n", name, fname));
 	  }
 	}
 
@@ -133,7 +145,12 @@ py_eval(str, type=1)
 	int 		context;
     CODE:
 	Printf(("py_eval: code: %s\n", str));
+	/* doc:  if the module wasn't already loaded, you will get an empty
+	* module object. */
 	main_module = PyImport_AddModule("__main__");
+	if(main_module == NULL) {
+		croak("Error -- Import_AddModule of __main__ failed");
+	}
 	Printf(("py_eval: main_module=%p\n", main_module));
 	globals = PyModule_GetDict(main_module);
 	Printf(("py_eval: globals=%p\n", globals));
@@ -273,7 +290,7 @@ py_call_method(_inst, mname, ...)
 
   Printf(("inst {%p} successfully passed the PVMG test\n", inst));
 
-  if (!PyInstance_Check(inst)) {
+  if (!(PyInstance_Check(inst) || inst->ob_type->tp_flags & Py_TPFLAGS_HEAPTYPE)) {
     croak("Attempted to call method '%s' on a non-instance", mname);
     XSRETURN_EMPTY;
   }

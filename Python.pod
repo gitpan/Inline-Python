@@ -25,16 +25,17 @@ for things to bind to Perl. The process of interrogating the Python
 interpreter for globals only occurs the first time you run your Python code. 
 The namespace is cached, and subsequent calls use the cached version.
 
-=head1 WHAT'S NEW?
-
-One of the coolest new features in this release of Inline::Python is that
-you can now access Perl from within your embedded Python code. This allows
-all sorts of interesting interaction between the languages. 
-
 This document describes C<Inline::Python>, the Perl package which gives you
 access to a Python interpreter. For lack of a better place to keep it, it 
 also gives you instructions on how to use C<perlmodule>, the Python package 
 which gives you access to the Perl interpreter.
+
+=head1 WHAT'S NEW?
+
+Version 0.21 provides the ability to bind to 'new-style' classes (as
+defined by the python PEP's 252 and 253.)  See L<New-Style Classes> for
+details.
+
 
 =head1 Using the Inline::Python Module
 
@@ -107,6 +108,48 @@ class, not a function. That's just as easy:
    __Python__
 
    from mylibrary import myclass as Myclass
+
+=head2 New-Style Classes
+
+As of python 2.2, the python internals have begun to change in a way
+which makes types 'look' more like classes.  This means that your python
+code can now subclass builtin python types such as lists, tuples,
+integers, and etc.  It also means that identifying python objects and
+creating Perl bindings for them has become a little trickier.
+
+See Guido's write-up (http://www.python.org/2.2.2/descrintro.html) and
+the relevant Python Enhancement Proposals (PEP) numbers 252 and 253 for
+details about the python code.  Also, see the mailing-list discussion
+(http://mail.python.org/pipermail/python-dev/2004-July/046060.html) for
+possible implications regarding C-language python extensions.
+
+This change should not affect code which uses Inline::Python, except
+that it allows you to bind to python classes which have been written
+using these new features.  In most cases, you will be importing an
+entire class from an external library as defined in the example above. 
+
+In other cases, you may be writing Inline::Python code as follows:
+
+   use Inline Python => <<'END';
+   class Foo(object):
+      def __init__(self):
+         print "new Foo object being created"
+         self.data = {}
+      def get_data(self): return self.data
+      def set_data(self,dat): 
+         self.data = dat
+   END
+
+Additional caveats may exist.  Note that if the python class is
+subclassing one of the builtin types which would normally be accessible
+as a 'Perlish' translation, that the instance will be an opaque object
+accessible only through its class methods.
+
+  # Class is defined as 'def Class(float):'
+  my $obj = Class->new(4);
+  print $$obj "\n"; # will NOT print '4.0'
+
+=head2 New-Style
 
 =head2 Boundary Conditions
 
@@ -526,7 +569,7 @@ Note that if you want methods to be created as I've shown, you must pass
 them to py_bind_class() yourself. It doesn't create anything except new()
 and the @ISA array. It doesn't need to, since the base class knows how to
 deal with any method call -- but it's also slower, since it has to walk up
-the inheritence tree to the AUTOLOAD method. I recommend binding to
+the inheritance tree to the AUTOLOAD method. I recommend binding to
 the functions you know about, especially if you're the one writing the code.
 If it's auto-generated, use py_study_package(), described below.
 
@@ -611,7 +654,7 @@ Example:
 
 The namespace imported into perl is ONLY that related to C<A>. Nothing
 related to C<mymodule> or C<B> is imported, unless some Python code 
-explictly copies variables from the mymodule namespace into the global 
+explicitly copies variables from the mymodule namespace into the global 
 namespace before Perl binds to it.
 
 =back
@@ -623,6 +666,9 @@ Neil Watkiss <NEILW@cpan.org>
 Brian Ingerson <INGY@cpan.org> is the author of Inline, Inline::C and
 Inline::CPR. He was responsible for much encouragement and many
 suggestions throughout the development of Inline::Python.
+
+Eric Wilhelm provided support for 'new-style' classes in version 0.21. Many
+thanks, Eric!
 
 =head1 COPYRIGHT
 

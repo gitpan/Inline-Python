@@ -1,5 +1,10 @@
 Revision history for Perl extension Inline::Python.
 
+0.21  Mon Jul 26 13:40:57 CDT 2004
+	[Patch from Eric Wilhelm]
+	- Added support for 'new-style' python classes which subtype builtin
+	  types per PEP's 252 and 253.
+
 0.20  Mon Jul  9 16:46:56 PDT 2001
 	- Made the Makefile.PL more clever about how it picks debugging 
 	  information. It accepts an optional argument, too, so it's
