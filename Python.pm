@@ -8,7 +8,7 @@ require Exporter;
 
 use vars qw(@ISA $VERSION @EXPORT_OK);
 @ISA = qw(Inline DynaLoader Exporter);
-$VERSION = '0.13';
+$VERSION = '0.14';
 
 @EXPORT_OK = qw(eval_python);
 

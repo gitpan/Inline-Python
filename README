@@ -26,6 +26,27 @@ The one line version is:
    perl -le 'use Inline Python=>q{def JAxH(x):return"Just Another %s Hacker"%x};print JAxH+Inline'
 
 -------------------------------------------------------------------------------
+FEATURES:
+
+Inline::Python version 0.14 is a minor upgrade with the following changes:
+
++ Added ability to pass binary strings between Perl & Python. Previously,
+  the length of the string was calculated using strlen().
+
+Inline::Python version 0.13 is a minor upgrade with the following changes:
+
++ Win32 code added to Makefile.PL to search for Python library and includes.
++ GNU macro extensions removed to enable building under MSVC++.
+
+Other features of Inline::Python include:
+
+= Automatically interprets your Python code in an embedded interpreter.
+= Interrogates the Python interpreter about the namespace.
+= Caches the namespace so that subsequent runs load faster.
+= Translates Perl data into Python data on-the-fly.
+= Support for directly accessing the Python interpreter from Perl.
+
+-------------------------------------------------------------------------------
 INSTALLATION:
 
 This module requires Inline.pm version 0.30 or higher to be installed.

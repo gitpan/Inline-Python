@@ -99,7 +99,7 @@ SV* Py2Pl (PyObject *obj, char *perl_class) {
     else {
        PyObject *string = PyObject_Str(obj);  /* new reference */
        char *str = PyString_AsString(string);
-       SV* s2 = newSVpv(str,0);
+       SV* s2 = newSVpv(str,PyString_Size(string));
        Py_DECREF(string);
        return s2;
     }
@@ -128,10 +128,11 @@ PyObject *Pl2Py (SV *obj) {
       Py_DECREF(tmp);
    }
    else if (SvPOKp(obj)) {
-      char *str = SvPV_nolen(obj);
+      STRLEN num;
+      char *str = SvPV(obj,num);
       Printf(("string = "));
       Printf(("%s\n", str));
-      o = PyString_FromString(str);
+      o = PyString_FromStringAndSize(str,num);
       Printf(("string ok\n"));
    }
    else if (SvROK(obj) && SvTYPE(SvRV(obj))==SVt_PVAV) {

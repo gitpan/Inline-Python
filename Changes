@@ -1,0 +1,11 @@
+Revision history for Perl extension Inline::Python.
+
+0.14  Thu Mar 22 08:50:33 PST 2001
+	- Added support for passing binary strings between Python & Perl.
+
+0.13  Sun Mar  4 22:09:35 PST 2001
+	- Added Win32 code to search for Python installations on Win32
+	- Eliminated GNU-specific preprocessor macro syntax
+
+0.10  Thu Nov 23 16:46:27 PST 2000
+	- Created Inline::Python.
