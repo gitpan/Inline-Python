@@ -1,0 +1,53 @@
+This file documents the versions of Perl and Python with which
+Inline::Python has been tested. All these tests were performed on
+RedHat Linux 6.2, standard install. ActivePerl 620 and 623 were
+installed in a clean home directory, along with Python 1.5.2, 1.6 and
+2.0.
+
+Across: Perl versions (NB: AP stands for ActivePerl)
+Down: Python versions (NB: AP stands for ActivePython)
+
+---------------------------------
+	AP620	AP623	5.005_03
+1.5.2	OK	-	OK
+1.6	OK	OK*1	OK*2
+2.0	-	OK*3	OK*4
+AP 2.0	OK*5	-	-
+---------------------------------
+
+NOTES:
+	*1 	Required extra libs: -ltcl -ltk -ltix -lncurses
+	*2	Required extra libs: -ltcl -ltk -ltix
+	*3	Required extra libs: -ltcl -ltk -ltix -ldb -lutil
+	*4	Required extra libs: -ltcl -ltk -ltix -ldb -lutil -lpthread
+	*5	Required extra libs: -ldb -lutil
+
+The general trend is that if you have Python built to use Tkinter,
+you'll have to include libtcl and libtk. You may require libtix as
+well (I did).
+
+Because of some new featurs in Python 2.0, it requires the libdb
+library, which in turn requires libutil. 
+
+Here is a table of compile options required in an easier format:
+(assuming Tkinter is enabled)
+
+Perl	Python	Libraries
+----------------------------------
+5.005	1.5.2	-lpython1.5
+AP620	1.5.2	not tested
+AP623	1.5.2	-lpython1.5
+5.005	1.6	-lpython1.6 -ltcl -ltk -ltix
+AP620	1.6	-lpython1.6 -ltcl -ltk -ltix
+AP623	1.6	-lpython1.6 -ltcl -ltk -ltix
+5.005	2.0	-lpython2.0 -ltcl -ltk -ltix -ldb -lutil -lpthread
+AP620	2.0	not tested
+AP623	2.0	-lpython2.0 -ltcl -ltk -ltix -ldb -lutil
+5.005	AP2.0	-lpython2.0 -ltcl -ltk -ltix -ldb -lutil -lpthread
+AP620	AP2.0	-lpython2.0 -ltcl -ltk -ltix -ldb -lutil
+AP623	AP2.0	-lpython2.0 -ltcl -ltk -ltix -ldb -lutil 
+
+All the (complete) entries listed above passed 'make test' correctly.
+
+Hopefully, Makefile.PL will detect your setup properly and you won't
+have to worry about this.

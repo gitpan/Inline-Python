@@ -1,0 +1,71 @@
+INTRODUCTION:
+
+Inline::Python -- Write Perl subroutines in Python.
+
+Inline::Python lets you write Perl subroutines and classes in
+Python. You don't have to use any funky techniques for sharing most
+types of data between the two languages, either. Inline::Python comes
+with its own data translation service. It converts any Python structures
+it knows about into Perl structures, and vice versa. 
+
+Example:
+
+   use Inline Python => <<'END';
+   def JAxH(x): 
+      return "Just Another %s Hacker" % x
+   END
+
+   print JAxH('Inline'), "\n";
+
+When run, this complete program prints:
+
+   Just Another Inline Hacker.
+
+The one line version is:
+
+   perl -le 'use Inline Python=>q{def JAxH(x):return"Just Another %s Hacker"%x};print JAxH+Inline'
+
+-------------------------------------------------------------------------------
+INSTALLATION:
+
+This module requires Inline.pm version 0.30 or higher to be installed.
+
+To install Inline::Python do this:
+
+perl Makefile.PL
+make
+make test
+make install
+
+(On ActivePerl for MSWin32, use nmake instead of make.)
+
+You have to 'make install' before you can run it successfully.
+
+-------------------------------------------------------------------------------
+TROUBLESHOOTING:
+
+Python and Perl are very different beasts. Perl does "true" dynamic
+loading, so if you don't use a package you don't have to load
+it. Embedding Python seems to require that you link in all packages
+that Python *could* use. I'm not sure why this occurs yet. The
+solution I have so far is to look at which libraries Python has built
+into it, and include those into your project. This makes loading
+Python slower, but does not affect execution speed.
+
+Read the file TESTED and look for a setup similar to yours. The most
+likely cause of problems is compile flags being set wrong. You *may*
+have to edit Makefile.PL and type in extra compilation flags.
+
+-------------------------------------------------------------------------------
+INFORMATION:
+
+- For more information on Inline::Python see 'perldoc Inline::Python'.
+- For information about Inline.pm, see 'perldoc Inline'.
+- For information on using Python or the Python C API, visit http://www.python.org.
+
+The Inline::Python mailing list is inline@perl.org. Send mail to
+inline-subscribe@perl.org to subscribe.
+
+Please send questions and comments to "Neil Watkiss" <NEILW@cpan.org>
+
+Copyright (c) 2000, Neil Watkiss. All Rights Reserved.  
