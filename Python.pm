@@ -8,13 +8,14 @@ require Exporter;
 
 use vars qw(@ISA $VERSION @EXPORT_OK);
 @ISA = qw(Inline DynaLoader Exporter);
-$VERSION = '0.11';
+$VERSION = '0.12';
 
 @EXPORT_OK = qw(eval_python);
 
 #==============================================================================
 # Load (and initialize) the Python Interpreter
 #==============================================================================
+sub dl_load_flags { 0x01 }
 Inline::Python->bootstrap($VERSION);
 
 #==============================================================================
