@@ -28,6 +28,11 @@ The one line version is:
 -------------------------------------------------------------------------------
 FEATURES:
 
+Inline::Python version 0.15 is a minor upgrade with the following changes:
+
++ Migrated to Inline version 0.42. Previous versions were incompatible with
+  the Inline-0.4x branch.
+
 Inline::Python version 0.14 is a minor upgrade with the following changes:
 
 + Added ability to pass binary strings between Perl & Python. Previously,

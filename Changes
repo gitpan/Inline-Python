@@ -1,5 +1,8 @@
 Revision history for Perl extension Inline::Python.
 
+0.15  Sun Jun 10 18:39:23 PDT 2001
+	- Ported to Inline 0.42.
+
 0.14  Thu Mar 22 08:50:33 PST 2001
 	- Added support for passing binary strings between Python & Perl.
 
