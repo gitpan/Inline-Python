@@ -34,3 +34,4 @@ t/17once.t
 t/18newclass.t
 util.c
 util.h
+META.yml                                 Module meta-data (added by MakeMaker)

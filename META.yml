@@ -1,0 +1,14 @@
+--- #YAML:1.0
+name:                Inline-Python
+version:             0.23
+abstract:            Write Perl subs and classes in Python.
+license:             perl
+author:              
+    - Neil Watkiss <NEILW@cpan.org>
+generated_by:        ExtUtils::MakeMaker version 6.42
+distribution_type:   module
+requires:     
+    Inline:                        0.42
+meta-spec:
+    url:     http://module-build.sourceforge.net/META-spec-v1.3.html
+    version: 1.3
