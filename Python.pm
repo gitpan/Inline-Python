@@ -6,7 +6,7 @@ require DynaLoader;
 require Exporter;
 use vars qw(@ISA $VERSION @EXPORT_OK);
 @ISA = qw(Inline DynaLoader Exporter);
-$VERSION = '0.23';
+$VERSION = '0.24';
 @EXPORT_OK = qw(py_eval
 		py_new_object
 		py_call_method 
@@ -323,6 +323,10 @@ sub AUTOLOAD {
     $AUTOLOAD =~ s|.*::(\w+)|$1|;
     splice @_, 1, 0, $AUTOLOAD;
     return &Inline::Python::py_call_method;
+}
+
+# avoid AUTOLOAD warning
+sub DESTROY {
 }
 
 1;

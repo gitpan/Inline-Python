@@ -32,6 +32,7 @@ t/15anon.t
 t/16evalpy.t
 t/17once.t
 t/18newclass.t
+t/19testref.t
 util.c
 util.h
 META.yml                                 Module meta-data (added by MakeMaker)
