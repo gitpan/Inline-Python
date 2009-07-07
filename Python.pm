@@ -6,7 +6,7 @@ require DynaLoader;
 require Exporter;
 use vars qw(@ISA $VERSION @EXPORT_OK);
 @ISA = qw(Inline DynaLoader Exporter);
-$VERSION = '0.28';
+$VERSION = '0.29';
 @EXPORT_OK = qw(py_eval
 		py_new_object
 		py_call_method 
@@ -327,6 +327,15 @@ sub AUTOLOAD {
 
 # avoid AUTOLOAD warning
 sub DESTROY {
+}
+
+package Inline::Python::Function;
+
+use overload '&{}' => \&call, fallback => 1;
+
+sub call {
+    my $self = shift;
+    return sub { Inline::Python::py_call_function_ref($$self, @_) };
 }
 
 1;
