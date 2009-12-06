@@ -6,7 +6,7 @@ require DynaLoader;
 require Exporter;
 use vars qw(@ISA $VERSION @EXPORT_OK);
 @ISA = qw(Inline DynaLoader Exporter);
-$VERSION = '0.30';
+$VERSION = '0.31';
 @EXPORT_OK = qw(py_eval
 		py_new_object
 		py_call_method 
@@ -313,9 +313,18 @@ sub py_new_object {
 #==============================================================================
 package Inline::Python::Object;
 
+use overload '%{}' => \&__data__, fallback => 1;
+
 sub new {
     my $perlpkg = shift;
     return bless &Inline::Python::py_call_function, $perlpkg;
+}
+
+sub __data__ {
+    my ($self) = @_;
+
+    tie my %data, 'Inline::Python::Object::Data', $self;
+    return \%data;
 }
 
 sub AUTOLOAD {
@@ -327,6 +336,30 @@ sub AUTOLOAD {
 
 # avoid AUTOLOAD warning
 sub DESTROY {
+}
+
+package Inline::Python::Object::Data;
+
+sub new {
+    my $class = shift;
+    return $class->TIEHASH(@_);
+}
+
+sub TIEHASH {
+    my ($class, $self) = @_;
+    return bless \$self, $class;
+}
+
+sub FETCH {
+    my ($self, $key) = @_;
+
+    return Inline::Python::py_get_attr($$self, $key);
+}
+
+sub STORE {
+    my ($self, $key, $value) = @_;
+
+    return Inline::Python::py_set_attr($$self, $key, $value);
 }
 
 package Inline::Python::Function;

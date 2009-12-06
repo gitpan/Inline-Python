@@ -1,4 +1,5 @@
 /* -*- C -*- */
+/* vim: set shiftwidth=2 softtabstop=2: */
 #include "EXTERN.h" 
 #include "perl.h"
 #include "XSUB.h"
@@ -449,4 +450,79 @@ py_call_method(_inst, mname, ...)
   } else {
     XPUSHs(ret);
   }
+
+#undef  NUM_FIXED_ARGS
+#define NUM_FIXED_ARGS 2
+
+void
+py_get_attr(_inst, key)
+  SV*	_inst;
+  SV*   key;
+  PREINIT:
+
+  PyObject *inst;
+  char     *key_name;
+  STRLEN   len;
+  PyObject *py_retval; /* the return value */
+  SV       *ret;
+
+  PPCODE:
+
+  Printf(("get_object_data\n"));
+
+  if (SvROK(_inst) && SvTYPE(SvRV(_inst))==SVt_PVMG) {
+    inst = (PyObject*)SvIV(SvRV(_inst));
+  }
+  else {
+    croak("Object did not have Inline::Python::Object magic");
+    XSRETURN_EMPTY;
+  }
+
+  Printf(("inst {%p} successfully passed the PVMG test\n", inst));
+
+  key_name = SvPV(key, len);
+  py_retval = PyObject_GetAttrString(inst, key_name);
+
+  Printf(("calling Py2Pl()\n"));
+  ret = Py2Pl(py_retval);
+  sv_2mortal(ret);
+  Py_DECREF(py_retval);
+  
+  XPUSHs(ret);
+
+#undef  NUM_FIXED_ARGS
+#define NUM_FIXED_ARGS 2
+
+void
+py_set_attr(_inst, key, value)
+  SV* _inst;
+  SV* key;
+  SV* value;
+
+  PREINIT:
+
+  PyObject *inst, *py_value;
+  char     *key_name;
+  STRLEN   len;
+
+  PPCODE:
+
+  Printf(("set_attr\n"));
+
+  if (SvROK(_inst) && SvTYPE(SvRV(_inst))==SVt_PVMG) {
+    inst = (PyObject*)SvIV(SvRV(_inst));
+  }
+  else {
+    croak("Object did not have Inline::Python::Object magic");
+    XSRETURN_EMPTY;
+  }
+
+  Printf(("inst {%p} successfully passed the PVMG test\n", inst));
+
+  py_value = Pl2Py(value);
+  key_name = SvPV(key, len);
+  PyObject_SetAttrString(inst, key_name, py_value);
+  Py_DECREF(py_value);
+
+  XSRETURN_EMPTY;
 
