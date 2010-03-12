@@ -1,4 +1,4 @@
-use Test::More tests => 8;
+use Test::More tests => 9;
 
 use Inline Config => DIRECTORY => './blib_test';
 use Inline::Python qw(py_call_function);
@@ -18,7 +18,9 @@ def perl_list(a):
 
 END
 
-ok(ref scalar py_call_function('__main__', 'return_empty_array') eq 'ARRAY');
+my $a = py_call_function('__main__', 'return_empty_array');
+ok(ref $a eq 'ARRAY');
+ok(@$a == 0, 'emtpy array ref -> empty list');
 my @a = py_call_function('__main__', 'return_empty_array');
 ok(@a == 0);
 
