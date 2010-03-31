@@ -1,4 +1,4 @@
-use Test::More tests => 9;
+use Test::More tests => 11;
 
 use Inline Config => DIRECTORY => './blib_test';
 use Inline::Python qw(py_call_function);
@@ -35,6 +35,12 @@ ok(@a == 1);
 is((bounce_array([1, 2, 3]))[2], 3);
 
 is((perl_list(Foo->new))[2], 3);
+
+my @b = (0.1,0.2,0.3,0.4);
+is((bounce_array(\@b))[0], 0.1);
+
+map($b[$_]+$b[$_], 0..$#b);
+is((bounce_array(\@b))[1], 0.2);
 
 package Foo;
 
