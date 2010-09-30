@@ -21,11 +21,11 @@
  ****************************/
 SV *Py2Pl(PyObject * obj) {
 	/* elw: see what python says things are */
-	PyObject *this_type = PyObject_Type(obj);
-	PyObject *t_string = PyObject_Str(this_type);
 	int is_string = PyString_Check(obj) || PyUnicode_Check(obj);
-	char *type_str = PyString_AsString(t_string);
-	Printf(("type is %s\n", type_str));
+        PyObject *this_type = PyObject_Type(obj);
+        PyObject *t_string = PyObject_Str(this_type);
+        char *type_str = PyString_AsString(t_string);
+        Printf(("type is %s\n", type_str));
 #ifdef I_PY_DEBUG
 	printf("Py2Pl object:\n\t");
 	PyObject_Print(obj, stdout, Py_PRINT_RAW);
@@ -43,6 +43,7 @@ SV *Py2Pl(PyObject * obj) {
 	Printf(("Mapping check:  %i\n", PyMapping_Check(obj)));
 	Printf(("Sequence check: %i\n", PySequence_Check(obj)));
 	Printf(("Iter check:     %i\n", PyIter_Check(obj)));
+	Printf(("Function check: %i\n", PyFunction_Check(obj)));
 	Printf(("Module check:   %i\n", PyModule_Check(obj)));
 	Printf(("Class check:    %i\n", PyClass_Check(obj)));
 	Printf(("Method check:   %i\n", PyMethod_Check(obj)));
@@ -69,7 +70,19 @@ SV *Py2Pl(PyObject * obj) {
 	/* unwrap Perl code refs */
 	else if (PerlSubObject_Check(obj)) {
 		Printf(("Py2Pl: Sub_object\n"));
-		return ((PerlSub_object *) obj)->ref;
+		SV *ref = ((PerlSub_object *) obj)->ref;
+		if (! ref) { // probably an inherited method
+			if (! ((PerlSub_object *) obj)->obj)
+				croak("Error: could not find a code reference or object method for PerlSub");
+			SV *sub_obj = (SV*)SvRV(((PerlSub_object *) obj)->obj);
+			HV* pkg = SvSTASH(sub_obj);
+			char *sub = PyString_AsString(PyObject_Str(((PerlSub_object *) obj)->sub));
+			GV* const gv = Perl_gv_fetchmethod_autoload(aTHX_ pkg, sub, TRUE);
+			if (gv && isGV(gv)) {
+				ref = GvCV(gv);
+			}
+		}
+		return newRV_inc((SV *) ref);
 	}
 
 	else
@@ -203,7 +216,7 @@ SV *Py2Pl(PyObject * obj) {
 	}
 
 	/* a function or method */
-	else if (PyFunction_Check(obj)) {
+	else if (PyFunction_Check(obj) || PyMethod_Check(obj)) {
 		SV *inst_ptr = newSViv(0);
 		SV *inst;
 		MAGIC *mg;
@@ -400,14 +413,22 @@ PyObject *Pl2Py(SV * obj) {
 
 void
 croak_python_exception() {
-    PyTypeObject *ex_type;
-    PyObject *ex_value, *ex_traceback;
+    PyObject *ex_type, *ex_value, *ex_traceback;
     PyErr_Fetch(&ex_type, &ex_value, &ex_traceback);
     PyErr_NormalizeException(&ex_type, &ex_value, &ex_traceback);
 
     PyObject *ex_message = PyObject_Str(ex_value);	/* new reference */
 
-    croak("%s: %s\n", (*ex_type).tp_name, PyString_AsString(ex_message));
+    if (ex_traceback) {
+        PyObject *tb_lineno = PyObject_GetAttrString(ex_traceback, "tb_lineno");
+
+        croak("%s: %s at line %i\n", ((PyTypeObject *)ex_type)->tp_name, PyString_AsString(ex_message), PyInt_AsLong(tb_lineno));
+
+        Py_DECREF(tb_lineno);
+    }
+    else {
+        croak("%s: %s", ((PyTypeObject *)ex_type)->tp_name, PyString_AsString(ex_message));
+    }
 
     Py_DECREF(ex_message);
     Py_DECREF(ex_type);
