@@ -48,6 +48,7 @@ void do_pyinit() {
   main_dict = PyModule_GetDict(PyImport_AddModule("__main__"));
   PyDict_SetItemString(main_dict, "perl", perl_obj);
 
+  Py_DECREF(perl_obj);
   Py_DECREF(dummy1); 
   Py_DECREF(dummy2);
 #endif
@@ -242,7 +243,7 @@ py_call_function(PYPKG, FNAME, ...)
   Printf(("calling Py2Pl\n"));
   ret = Py2Pl(py_retval);
   if (! sv_isobject(ret))
-      sv_2mortal(ret); // if ret is an object, this already gets done by the following line
+      sv_2mortal(ret); /* if ret is an object, this already gets done by the following line */
   Py_DECREF(py_retval);
   
   if (
@@ -324,7 +325,7 @@ py_call_function_ref(FUNC, ...)
   Printf(("calling Py2Pl\n"));
   ret = Py2Pl(py_retval);
   if (! sv_isobject(ret))
-      sv_2mortal(ret); // if ret is an object, this already gets done by the following line
+      sv_2mortal(ret); /* if ret is an object, this already gets done by the following line */
   Py_DECREF(py_retval);
   
   if (
@@ -427,7 +428,7 @@ py_call_method(_inst, mname, ...)
   Printf(("calling Py2Pl()\n"));
   ret = Py2Pl(py_retval);
   if (! sv_isobject(ret))
-      sv_2mortal(ret); // if ret is an object, this already gets done by the following line
+      sv_2mortal(ret); /* if ret is an object, this already gets done by the following line */
   Py_DECREF(py_retval);
   
   if (
@@ -515,7 +516,7 @@ py_get_attr(_inst, key)
   Printf(("calling Py2Pl()\n"));
   ret = Py2Pl(py_retval);
   if (! sv_isobject(ret))
-      sv_2mortal(ret); // if ret is an object, this already gets done by the following line
+      sv_2mortal(ret); /* if ret is an object, this already gets done by the following line */
   Py_DECREF(py_retval);
 
   XPUSHs(ret);
@@ -556,3 +557,13 @@ py_set_attr(_inst, key, value)
 
   XSRETURN_EMPTY;
 
+#undef  NUM_FIXED_ARGS
+#define NUM_FIXED_ARGS 0
+
+void
+py_finalize()
+  PPCODE:
+
+  Py_Finalize();
+
+  XSRETURN_EMPTY;

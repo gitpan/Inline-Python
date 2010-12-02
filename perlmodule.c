@@ -139,12 +139,14 @@ PerlPkg_getattr(PerlPkg_object *self, char *name) {
   else {
     PyObject *tmp = PyString_FromString(name);
     char *full_c = PyString_AsString(self->full);
-    if (perl_pkg_exists(full_c, name)) {
-      return newPerlPkg_object(self->full, tmp);
-    }
-    else {
-      return newPerlSub_object(self->full, tmp, NULL);
-    }
+
+    PyObject *res = perl_pkg_exists(full_c, name)
+      ? newPerlPkg_object(self->full, tmp)
+      : newPerlSub_object(self->full, tmp, NULL);
+
+    Py_DECREF(tmp);
+
+    return res;
   }
 }
 
@@ -205,7 +207,7 @@ static void
 PerlObj_dealloc(PerlObj_object *self) {
   Py_XDECREF(self->pkg);
 
-  if (self->obj) sv_2mortal(self->obj); // mortal instead of DECREF. Object might be return value
+  if (self->obj) sv_2mortal(self->obj); /* mortal instead of DECREF. Object might be return value */
 
   PyObject_Del(self);
 }
@@ -245,12 +247,13 @@ PerlObj_getattr(PerlObj_object *self, char *name) {
     if (gv && isGV(gv)) {
       PyObject *py_name = PyString_FromString(name);
       retval = newPerlMethod_object(self->pkg, py_name, self->obj);
+      Py_DECREF(py_name);
     }
     else {
       /* search for an attribute */
-      // check if the object supports the __getattr__ protocol
+      /* check if the object supports the __getattr__ protocol */
       GV* const gv = Perl_gv_fetchmethod_autoload(aTHX_ pkg, "__getattr__", FALSE);
-      if (gv && isGV(gv)) { // __getattr__ supported! Let's see if an attribute is found.
+      if (gv && isGV(gv)) { /* __getattr__ supported! Let's see if an attribute is found. */
 	dSP;
 
 	ENTER;
@@ -272,14 +275,14 @@ PerlObj_getattr(PerlObj_object *self, char *name) {
 	if (count > 1)
 	  croak("__getattr__ may only return a single scalar or an empty list!\n");
 
-	if (count == 1) { // attribute exists! Now give the value back to Python
+	if (count == 1) { /* attribute exists! Now give the value back to Python */
 	  retval = Pl2Py(POPs);
 	}
 
 	FREETMPS;
 	LEAVE;
       }
-      if (! retval) { // give up and raise a KeyError
+      if (! retval) { /* give up and raise a KeyError */
         char attribute_error[strlen(name) + 21];
         sprintf(attribute_error, "attribute %s not found", name);
         PyErr_SetString(PyExc_KeyError, attribute_error);
@@ -291,12 +294,13 @@ PerlObj_getattr(PerlObj_object *self, char *name) {
 
 static PyObject*
 PerlObj_mp_subscript(PerlObj_object *self, PyObject *key) {
-  // check if the object supports the __getattr__ protocol
+  /* check if the object supports the __getitem__ protocol */
+  PyObject *item = NULL;
   char *name = PyString_AsString(PyObject_Str(key));
   SV *obj = (SV*)SvRV(self->obj);
   HV* pkg = SvSTASH(obj);
   GV* const gv = Perl_gv_fetchmethod_autoload(aTHX_ pkg, "__getitem__", FALSE);
-  if (gv && isGV(gv)) { // __getitem__ supported! Let's see if the key is found.
+  if (gv && isGV(gv)) { /* __getitem__ supported! Let's see if the key is found. */
     dSP;
 
     ENTER;
@@ -318,26 +322,28 @@ PerlObj_mp_subscript(PerlObj_object *self, PyObject *key) {
     if (count > 1)
       croak("__getitem__ may only return a single scalar or an empty list!\n");
 
-    if (count == 1) { // item exists! Now give the value back to Python
-      return Pl2Py(POPs);
+    if (count == 1) { /* item exists! Now give the value back to Python */
+      item = Pl2Py(POPs);
     }
 
     FREETMPS;
     LEAVE;
 
-    char attribute_error[strlen(name) + 21];
-    sprintf(attribute_error, "attribute %s not found", name);
-    PyErr_SetString(PyExc_KeyError, attribute_error);
+    if (count == 0) {
+      char attribute_error[strlen(name) + 21];
+      sprintf(attribute_error, "attribute %s not found", name);
+      PyErr_SetString(PyExc_KeyError, attribute_error);
+    }
   }
   else {
     PyErr_Format(PyExc_TypeError, "'%.200s' object is unsubscriptable", self->ob_type->tp_name);
   }
-  return NULL;
+  return item;
 }
 
 static int
 PerlObj_compare(PerlObj_object *o1, PerlObj_object *o2) {
-  if (SvRV(o1->obj) == SvRV(o2->obj)) // just compare the dereferenced object pointers
+  if (SvRV(o1->obj) == SvRV(o2->obj)) /* just compare the dereferenced object pointers */
     return 0;
   return 1;
 }
@@ -477,7 +483,7 @@ PerlSub_dealloc(PerlSub_object *self) {
 static PyObject *
 PerlSub_call(PerlSub_object *self, PyObject *args, PyObject *kw) {
   dSP;
-  int i;  
+  int i;
   int len = PyObject_Length(args);
   int count;
   PyObject *retval;
@@ -498,12 +504,12 @@ PerlSub_call(PerlSub_object *self, PyObject *args, PyObject *kw) {
       SV *arg = Py2Pl(PyTuple_GetItem(args, i));
       av_push(positional, SvREFCNT_inc(arg));
     }
-    XPUSHs(newRV_noinc((SV *) positional));
+    XPUSHs((SV *) sv_2mortal((SV *) newRV_inc((SV *) positional)));
 
     SV *kw_hash = Py2Pl(kw);
     XPUSHs(kw_hash);
     sv_2mortal(kw_hash);
-    sv_2mortal(positional);
+    sv_2mortal((SV *)positional);
   }
   else {
     for (i=0; i<len; i++) {
@@ -747,7 +753,7 @@ static PyObject * special_perl_use(PyObject *ignored, PyObject *args) {
   Printf(("calling use...'%s'\n", PyString_AsString(s)));
 
   str = malloc((strlen("use ")
-		+ PyObject_Length(s)) * sizeof(char));
+		+ PyObject_Length(s) + 1) * sizeof(char));
   sprintf(str, "use %s", PyString_AsString(s));
 
   Printf(("eval-ing now!\n"));
@@ -823,6 +829,7 @@ initperl(void)
   d = PyDict_GetItemString(d, "modules");
   p = newPerlPkg_object(dummy1, dummy2);
   PyDict_SetItemString(d, "perl", p);
+  Py_DECREF(p);
 
 #ifdef CREATE_PERL
   create_perl();
