@@ -22,12 +22,12 @@
 SV *Py2Pl(PyObject * obj) {
 	/* elw: see what python says things are */
 	int is_string = PyString_Check(obj) || PyUnicode_Check(obj);
+#ifdef I_PY_DEBUG
         PyObject *this_type = PyObject_Type(obj);
         PyObject *t_string = PyObject_Str(this_type);
         char *type_str = PyString_AsString(t_string);
         Py_DECREF(t_string);
         Printf(("type is %s\n", type_str));
-#ifdef I_PY_DEBUG
 	printf("Py2Pl object:\n\t");
 	PyObject_Print(obj, stdout, Py_PRINT_RAW);
 	printf("\ntype:\n\t");
@@ -52,8 +52,8 @@ SV *Py2Pl(PyObject * obj) {
 		printf("heaptype true\n");
 	if ((obj->ob_type->tp_flags & Py_TPFLAGS_HAVE_CLASS))
 		printf("has class\n");
-#endif
         Py_DECREF(this_type);
+#endif
 	/* elw: this needs to be early */
 	/* None (like undef) */
 	if (!obj || obj == Py_None) {
@@ -81,7 +81,7 @@ SV *Py2Pl(PyObject * obj) {
 			char *sub = PyString_AsString(PyObject_Str(((PerlSub_object *) obj)->sub));
 			GV* const gv = Perl_gv_fetchmethod_autoload(aTHX_ pkg, sub, TRUE);
 			if (gv && isGV(gv)) {
-				ref = GvCV(gv);
+				ref = (SV *)GvCV(gv);
 			}
 		}
 		return newRV_inc((SV *) ref);
@@ -135,9 +135,18 @@ SV *Py2Pl(PyObject * obj) {
 			PyObject *tmp = PySequence_GetItem(obj, i);	/* new reference */
 			SV *next = Py2Pl(tmp);
 			av_push(retval, next);
-			SvREFCNT_inc(next);
+                        if (sv_isobject(next)) // needed because objects get mortalized in Py2Pl
+				SvREFCNT_inc(next);
 			Py_DECREF(tmp);
 		}
+
+		if (PyTuple_Check(obj)) {
+			_inline_magic priv;
+			priv.key = TUPLE_MAGIC_KEY;
+
+			sv_magic((SV * const)retval, (SV * const)NULL, PERL_MAGIC_ext, (char *) &priv, sizeof(priv));
+		}
+
 		return newRV_noinc((SV *) retval);
 	}
 
@@ -201,7 +210,8 @@ SV *Py2Pl(PyObject * obj) {
 
 				hv_store(retval, key_val, strlen(key_val), sv_val, 0);
 			}
-			SvREFCNT_inc(sv_val);
+                        if (sv_isobject(sv_val)) // needed because objects get mortalized in Py2Pl
+                            SvREFCNT_inc(sv_val);
 			Py_DECREF(key);
 			Py_DECREF(val);
 		}
@@ -358,20 +368,41 @@ PyObject *Pl2Py(SV * obj) {
 		AV *av = (AV *) SvRV(obj);
 		int i;
 		int len = av_len(av) + 1;
-		o = PyList_New(len);
 
-		Printf(("array (%i)\n", len));
+		if (py_is_tuple(obj)) {
+			o = PyTuple_New(len);
 
-		for (i = 0; i < len; i++) {
-			SV **tmp = av_fetch(av, i, 0);
-			if (tmp) {
-				PyObject *tmp_py = Pl2Py(*tmp);
-				PyList_SetItem(o, i, tmp_py);
+			Printf(("tuple (%i)\n", len));
+
+			for (i = 0; i < len; i++) {
+				SV **tmp = av_fetch(av, i, 0);
+				if (tmp) {
+					PyObject *tmp_py = Pl2Py(*tmp);
+					PyTuple_SetItem(o, i, tmp_py);
+				}
+				else {
+					Printf(("Got a NULL from av_fetch for element %i. Might be a bug!", i));
+					Py_INCREF(Py_None);
+					PyTuple_SetItem(o, i, Py_None);
+				}
 			}
-			else {
-				Printf(("Got a NULL from av_fetch for element %i. Might be a bug!", i));
-				Py_INCREF(Py_None);
-				PyList_SetItem(o, i, Py_None);
+		}
+		else {
+			o = PyList_New(len);
+
+			Printf(("array (%i)\n", len));
+
+			for (i = 0; i < len; i++) {
+				SV **tmp = av_fetch(av, i, 0);
+				if (tmp) {
+					PyObject *tmp_py = Pl2Py(*tmp);
+					PyList_SetItem(o, i, tmp_py);
+				}
+				else {
+					Printf(("Got a NULL from av_fetch for element %i. Might be a bug!", i));
+					Py_INCREF(Py_None);
+					PyList_SetItem(o, i, Py_None);
+				}
 			}
 		}
 	}
@@ -387,10 +418,19 @@ PyObject *Pl2Py(SV * obj) {
 
 		for (i = 0; i < len; i++) {
 			HE *next = hv_iternext(hv);
-			I32 n_a;
-			char *key = hv_iterkey(next, &n_a);
+            SV *key = hv_iterkeysv(next);
+            if (!key)
+                croak("Hash entry without key!?");
+            STRLEN len;
+            char *key_str = SvPV(key, len);
+            PyObject *py_key;
+            if (SvUTF8(key))
+                py_key = PyUnicode_DecodeUTF8(key_str, len, "replace");
+            else
+                py_key = PyString_FromStringAndSize(key_str, len);
 			PyObject *val = Pl2Py(hv_iterval(hv, next));
-			PyDict_SetItemString(o, key, val);
+			PyDict_SetItem(o, py_key, val);
+			Py_DECREF(py_key);
 			Py_DECREF(val);
 		}
 

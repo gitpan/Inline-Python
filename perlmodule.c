@@ -279,6 +279,7 @@ PerlObj_getattr(PerlObj_object *self, char *name) {
 	  retval = Pl2Py(POPs);
 	}
 
+        PUTBACK;
 	FREETMPS;
 	LEAVE;
       }
@@ -326,6 +327,7 @@ PerlObj_mp_subscript(PerlObj_object *self, PyObject *key) {
       item = Pl2Py(POPs);
     }
 
+    PUTBACK;
     FREETMPS;
     LEAVE;
 
@@ -502,7 +504,7 @@ PerlSub_call(PerlSub_object *self, PyObject *args, PyObject *kw) {
     AV *positional = newAV();
     for (i=0; i<len; i++) {
       SV *arg = Py2Pl(PyTuple_GetItem(args, i));
-      av_push(positional, SvREFCNT_inc(arg));
+      av_push(positional, sv_isobject(arg) ? SvREFCNT_inc(arg) : arg);
     }
     XPUSHs((SV *) sv_2mortal((SV *) newRV_inc((SV *) positional)));
 
@@ -534,10 +536,10 @@ PerlSub_call(PerlSub_object *self, PyObject *args, PyObject *kw) {
   else {
     croak("Error: PerlSub called, but no C function, sub, or name found!\n");
   }
+  SPAGAIN;
   
   Py_DECREF(self); /* release*/
   
-  SPAGAIN;
 
   if (SvTRUE(ERRSV)) {
     warn("%s\n", SvPV_nolen(ERRSV));

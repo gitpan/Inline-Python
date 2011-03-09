@@ -107,7 +107,6 @@ py_study_package(PYPKG="__main__")
 
 	/* array of method names */
 	AV* methods = newAV();
-	AV* bases = newAV();
 
 	Printf(("Found a class: %s\n", name));
 
@@ -135,7 +134,7 @@ py_study_package(PYPKG="__main__")
   XPUSHs(newSVpv("classes", 0));
   XPUSHs(newRV_noinc((SV*)classes));
 
-SV *
+void
 py_eval(str, type=1)
 	char *str
 	int type
@@ -144,8 +143,9 @@ py_eval(str, type=1)
 	PyObject *	globals;
 	PyObject *	locals;
 	PyObject *	py_result;
-	int 		context;
-    CODE:
+	int             context;
+	SV*             ret = NULL;
+    PPCODE:
 	Printf(("py_eval: code: %s\n", str));
 	/* doc:  if the module wasn't already loaded, you will get an empty
 	* module object. */
@@ -157,8 +157,8 @@ py_eval(str, type=1)
 	globals = PyModule_GetDict(main_module);
 	Printf(("py_eval: globals=%p\n", globals));
 	locals = globals;
-	context = (type == 0) ? Py_eval_input : 
-		  (type == 1) ? Py_file_input : 
+	context = (type == 0) ? Py_eval_input :
+		  (type == 1) ? Py_file_input :
 				Py_single_input;
 	Printf(("py_eval: type=%i\n", type));
 	Printf(("py_eval: context=%i\n", context));
@@ -168,10 +168,14 @@ py_eval(str, type=1)
 		croak("Error -- py_eval raised an exception");
 		XSRETURN_EMPTY;
 	}
-	RETVAL = Py2Pl(py_result);
+	ret = Py2Pl(py_result);
+	if (! sv_isobject(ret))
+	    sv_2mortal(ret); /* if ret is an object, this already gets done by the following line */
 	Py_DECREF(py_result);
-    OUTPUT:
-	RETVAL
+	if (type == 0)
+	  XPUSHs(ret);
+	else
+	  XSRETURN_EMPTY;
 
 #undef  NUM_FIXED_ARGS
 #define NUM_FIXED_ARGS 2
@@ -213,8 +217,14 @@ py_call_function(PYPKG, FNAME, ...)
       PyTuple_SetItem(tuple, i-NUM_FIXED_ARGS, o);
     }
   }
+
+  PUTBACK;
+
   Printf(("calling func\n"));
   py_retval = PyObject_CallObject(func, tuple);
+
+  SPAGAIN; /* refresh local stack pointer, could have been modified by Perl code called from Python */
+
   Py_DECREF(func);
   Py_DECREF(tuple);
   Printf(("received a response\n"));
@@ -254,8 +264,9 @@ py_call_function(PYPKG, FNAME, ...)
     AV* av = (AV*)SvRV(ret);
     int len = av_len(av) + 1;
     int i;
+    EXTEND(SP, len);
     for (i=0; i<len; i++) {
-      XPUSHs(sv_2mortal(av_shift(av)));
+      PUSHs(sv_2mortal(av_shift(av)));
     }
   } else {
     XPUSHs(ret);
@@ -296,8 +307,14 @@ py_call_function_ref(FUNC, ...)
       PyTuple_SetItem(tuple, i-NUM_FIXED_ARGS, o);
     }
   }
+
+  PUTBACK;
+
   Printf(("calling func\n"));
   py_retval = PyObject_CallObject(func, tuple);
+
+  SPAGAIN; /* refresh local stack pointer, could have been modified by Perl code called from Python */
+
   Py_DECREF(tuple);
   Printf(("received a response\n"));
   if (!py_retval || (PyErr_Occurred() != NULL)) {
@@ -336,11 +353,12 @@ py_call_function_ref(FUNC, ...)
     AV* av = (AV*)SvRV(ret);
     int len = av_len(av) + 1;
     int i;
+    EXTEND(SP, len);
     for (i=0; i<len; i++) {
-      XPUSHs(sv_2mortal(av_shift(av)));
+      PUSHs(sv_2mortal(av_shift(av)));
     }
   } else {
-    XPUSHs(ret);
+    PUSHs(ret);
   }
 
 
@@ -354,7 +372,6 @@ py_call_method(_inst, mname, ...)
   PREINIT:
 
   PyObject *inst;
-  PyObject *inherited_method = NULL;
 
   /* Other variables */
   PyObject *method;    /* the method object */
@@ -406,8 +423,13 @@ py_call_method(_inst, mname, ...)
     }
   }
 
+  PUTBACK;
+
   Printf(("calling func\n"));
   py_retval = PyObject_CallObject(method, tuple);
+
+  SPAGAIN; /* refresh local stack pointer, could have been modified by Perl code called from Python */
+
   Py_DECREF(method);
   Py_DECREF(tuple);
   Printf(("received a response\n"));
@@ -440,11 +462,12 @@ py_call_method(_inst, mname, ...)
     AV* av = (AV*)SvRV(ret);
     int len = av_len(av) + 1;
     int i;
+    EXTEND(SP, len);
     for (i=0; i<len; i++) {
-      XPUSHs(sv_2mortal(av_shift(av)));
+      PUSHs(sv_2mortal(av_shift(av)));
     }
   } else {
-    XPUSHs(ret);
+    PUSHs(ret);
   }
 
 #undef  NUM_FIXED_ARGS
@@ -567,3 +590,10 @@ py_finalize()
   Py_Finalize();
 
   XSRETURN_EMPTY;
+
+#undef  NUM_FIXED_ARGS
+#define NUM_FIXED_ARGS 1
+
+int
+py_is_tuple(_inst)
+  SV* _inst;

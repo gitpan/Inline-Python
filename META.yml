@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               Inline-Python
-version:            0.38
+version:            0.39
 abstract:           Write Perl subs and classes in Python.
 author:
     - Neil Watkiss <NEILW@cpan.org>

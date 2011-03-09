@@ -6,11 +6,12 @@ require DynaLoader;
 require Exporter;
 use vars qw(@ISA $VERSION @EXPORT_OK);
 @ISA = qw(Inline DynaLoader Exporter);
-$VERSION = '0.38';
+$VERSION = '0.39';
 @EXPORT_OK = qw(py_eval
 		py_new_object
 		py_call_method 
 		py_call_function
+                py_is_tuple
 		py_bind_class
 		py_bind_func
 		py_study_package
