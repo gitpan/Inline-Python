@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               Inline-Python
-version:            0.39
+version:            0.40
 abstract:           Write Perl subs and classes in Python.
 author:
     - Neil Watkiss <NEILW@cpan.org>
@@ -12,6 +12,7 @@ build_requires:
     ExtUtils::MakeMaker:  0
 requires:
     Data::Dumper:  0
+    Digest::MD5:   2.5
     Inline:        0.46
     Test:          0
     Test::More:    0
