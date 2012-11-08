@@ -6,7 +6,7 @@ require DynaLoader;
 require Exporter;
 use vars qw(@ISA $VERSION @EXPORT_OK);
 @ISA = qw(Inline DynaLoader Exporter);
-$VERSION = '0.40';
+$VERSION = '0.41';
 @EXPORT_OK = qw(py_eval
 		py_new_object
 		py_call_method 
@@ -179,10 +179,6 @@ sub build {
 
     # Study the main namespace
     my %namespace = py_study_package('__main__');
-
-    warn "No functions or classes found!"
-      unless ((length @{$namespace{functions}}) > 0 and
-	      (length keys %{$namespace{classes}}) > 0);
 
     # Cache the results
     require Inline::denter;
