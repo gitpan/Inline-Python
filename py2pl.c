@@ -10,6 +10,9 @@
 #include "perlmodule.h"
 #endif
 
+SV* py_true;
+SV* py_false;
+
 /****************************
  * SV* Py2Pl(PyObject *obj)
  *
@@ -107,8 +110,7 @@ SV *Py2Pl(PyObject * const obj) {
         priv.key = INLINE_MAGIC_KEY;
         sv_magic(inst, inst, PERL_MAGIC_ext, (char *) &priv, sizeof(priv));
         MAGIC * const mg = mg_find(inst, PERL_MAGIC_ext);
-        mg->mg_virtual = (MGVTBL *) malloc(sizeof(MGVTBL));
-        mg->mg_virtual->svt_free = free_inline_py_obj;
+        mg->mg_virtual = &inline_mg_vtbl;
 
         sv_setiv(inst, (IV) obj);
         /*SvREADONLY_on(inst); */ /* to uncomment this means I can't
@@ -208,6 +210,21 @@ SV *Py2Pl(PyObject * const obj) {
     }
 
     /* an int */
+    else if (PyBool_Check(obj)) {
+        Printf(("Py2Pl: boolean\n"));
+        if (obj == Py_True)
+            return py_true;
+        if (obj == Py_False)
+            return py_false;
+
+        croak(
+            "Internal error: Pl2Py() caught a bool that is not True or False!? at %s, line %i.\n",
+            __FILE__,
+            __LINE__
+        );
+    }
+
+    /* an int */
     else if (PyInt_Check(obj)) {
         SV * const sv = newSViv(PyInt_AsLong(obj));
         Printf(("Py2Pl: integer\n"));
@@ -224,8 +241,7 @@ SV *Py2Pl(PyObject * const obj) {
         priv.key = INLINE_MAGIC_KEY;
         sv_magic(inst, inst, '~', (char *) &priv, sizeof(priv));
         MAGIC * const mg = mg_find(inst, '~');
-        mg->mg_virtual = (MGVTBL *) malloc(sizeof(MGVTBL));
-        mg->mg_virtual->svt_free = free_inline_py_obj;
+        mg->mg_virtual = &inline_mg_vtbl;
 
         sv_setiv(inst, (IV) obj);
         /*SvREADONLY_on(inst); */ /* to uncomment this means I can't
@@ -276,18 +292,26 @@ PyObject *Pl2Py(SV * const obj) {
 
     /* an object */
     if (sv_isobject(obj)) {
+        /* We know it's a blessed reference: */
 
-        /* We know it's a blessed reference:
+        SV * const obj_deref = SvRV(obj);
+
+        /* First check if it's one of the Inline::Python::Boolean values */
+
+        if (obj == py_true || obj_deref == SvRV(py_true))
+            return Py_True;
+        if (obj == py_false || obj_deref == SvRV(py_false))
+            return Py_False;
+
+        /*
          * Now it's time to check whether it's *really* a blessed Perl object,
          * or whether it's a blessed Python object with '~' magic set.
          * If '~' magic is set, we 'unwrap' it into its Python object.
          * If not, we wrap it up in a PerlObj_object. */
 
-        SV * const obj_deref = SvRV(obj);
-
         /* check for magic! */
-
         MAGIC * const mg = mg_find(obj_deref, '~');
+
         if (mg && Inline_Magic_Check(mg->mg_ptr)) {
             IV const ptr = SvIV(obj_deref);
             if (!ptr) {

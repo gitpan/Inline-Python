@@ -6,7 +6,7 @@ require DynaLoader;
 require Exporter;
 use vars qw(@ISA $VERSION @EXPORT_OK);
 @ISA = qw(Inline DynaLoader Exporter);
-$VERSION = '0.41';
+$VERSION = '0.42';
 @EXPORT_OK = qw(py_eval
 		py_new_object
 		py_call_method 
@@ -372,6 +372,27 @@ use overload '&{}' => \&call, fallback => 1;
 sub call {
     my $self = shift;
     return sub { Inline::Python::py_call_function_ref($$self, @_) };
+}
+
+package Inline::Python::Boolean;
+use overload bool => \&bool, '0+' => \&bool, '!' => \&negate, fallback => 1;
+
+our $true  = __PACKAGE__->new(1);
+our $false = __PACKAGE__->new(0);
+
+sub new {
+    my ($class, $value) = @_;
+    return bless \$value, $class;
+}
+
+sub bool {
+    my ($self) = @_;
+    return $$self;
+}
+
+sub negate {
+    my ($self) = @_;
+    return $self ? $false : $true;
 }
 
 1;
