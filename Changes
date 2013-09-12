@@ -1,5 +1,9 @@
 Revision history for Perl extension Inline::Python.
 
+0.43 Thu Sep 12 23:00:00 CEST 2013 (Stefan Seifert)
+	- Fixed converting floats from Perl to Python with different locale
+	- Fixed RT #87962
+
 0.42  Fri May 31 20:20:00 CEST 2013 (Stefan Seifert)
 	- Python booleans passed through Perl make it back to Python as Booleans
 	  instead of Integers.

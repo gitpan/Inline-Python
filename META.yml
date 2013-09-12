@@ -23,4 +23,4 @@ requires:
   Inline: 0.46
   Test: 0
   Test::More: 0
-version: 0.42
+version: 0.43

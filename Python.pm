@@ -6,7 +6,7 @@ require DynaLoader;
 require Exporter;
 use vars qw(@ISA $VERSION @EXPORT_OK);
 @ISA = qw(Inline DynaLoader Exporter);
-$VERSION = '0.42';
+$VERSION = '0.43';
 @EXPORT_OK = qw(py_eval
 		py_new_object
 		py_call_method 
@@ -222,7 +222,7 @@ sub load {
 
     # Bind it all
     py_bind_func($o->{API}{pkg} . "::$_", '__main__', $_)
-      for (@{ $o->{ILSM}{namespace}{functions} || {} });
+      for (@{ $o->{ILSM}{namespace}{functions} || [] });
     py_bind_class($o->{API}{pkg} . "::$_", '__main__', $_,
 		  @{$o->{ILSM}{namespace}{classes}{$_}})
       for keys %{ $o->{ILSM}{namespace}{classes} || {} };
