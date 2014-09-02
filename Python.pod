@@ -148,7 +148,7 @@ accessible only through its class methods.
 
   # Class is defined as 'def Class(float):'
   my $obj = Class->new(4);
-  print $$obj "\n"; # will NOT print '4.0'
+  print $$obj, "\n"; # will NOT print '4.0'
 
 =head2 New-Style
 
@@ -165,14 +165,14 @@ Of course you can! Check this out:
        class Bar:
            def __init__(self):
                print "new Bar()"
-           def tank():
+           def tank(self):
                return 10
        return Bar()
 
    END
 
    my $o = Foo();
-   $o->tank();
+   print $o->tank(), "\n";
 
 In this example, C<Bar> isn't imported because it isn't a global -- it's hidden
 inside the function Foo(). But Foo() is imported into Perl, and it returns an 
@@ -187,6 +187,19 @@ need: calling methods, in this case.
 
 Exceptions thrown in Python code get translated to Perl exceptions which you can
 catch using eval.
+
+=head1 Boolean
+
+Python supports a Boolean type and two constants False and True. If one of
+these is passed from Python to Perl, the value is represented by an
+Inline::Python::Boolean object that uses overload to behave like 1 or undef
+in boolean context in Perl. When this object is passed back to Python, it
+is translated back to the False or True constant it originated from.
+
+To pass a Boolean value that originated from Perl to Python use the two
+constants C<$Inline::Python::Boolean::true> and
+C<$Inline::Python::Boolean::false> if it is important that the value is
+of type Boolean in Python.
 
 =head1 Using Perl inside Python (inside Perl)
 
@@ -736,6 +749,10 @@ patches.
 This version of Inline::Python has been tested with Python versions from 2.5 to
 2.7. It may work on older versions but will almost certainly not work with
 Python 3.
+
+=head1 SOURCE REPOSITORY
+
+The Github repository for this project is at L<https://github.com/niner/inline-python-pm>. Pull requests are welcome.
 
 =head1 AUTHOR
 
