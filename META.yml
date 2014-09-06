@@ -16,4 +16,4 @@ no_index:
     - inc
 resources:
   repository: http://github.com/niner/inline-python-pm.git
-version: '0.44'
+version: '0.45'
