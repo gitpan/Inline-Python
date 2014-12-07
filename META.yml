@@ -2,9 +2,12 @@
 abstract: 'Write Perl subs and classes in Python.'
 author:
   - 'Neil Watkiss <NEILW@cpan.org>'
-build_requires: {}
+build_requires:
+  ExtUtils::MakeMaker: '0'
+configure_requires:
+  ExtUtils::MakeMaker: '0'
 dynamic_config: 1
-generated_by: 'ExtUtils::MakeMaker version 6.66, CPAN::Meta::Converter version 2.132830'
+generated_by: 'ExtUtils::MakeMaker version 6.98, CPAN::Meta::Converter version 2.142690'
 license: perl
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -14,6 +17,12 @@ no_index:
   directory:
     - t
     - inc
+requires:
+  Data::Dumper: '0'
+  Digest::MD5: '2.5'
+  Inline: '0.46'
+  Test: '0'
+  Test::More: '0'
 resources:
   repository: http://github.com/niner/inline-python-pm.git
-version: '0.45'
+version: '0.46'
